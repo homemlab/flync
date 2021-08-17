@@ -6,7 +6,7 @@ echo SOFTWARE VERSION $version
 ARGS=$(getopt -a --options d:l:g:a:t:m:v:h --long "dir:,list:,genome:,annot:,threads:,mapqual:,version:,help" -- "$@")
 
 # Constant or default variables ""
-appdir=$(echo $PWD)
+appdir=/bin/app
 threads=2
 mapcutoff=70
 progfile=$appdir/scripts/vlookup.awk
