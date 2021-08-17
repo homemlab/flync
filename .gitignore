@@ -1,0 +1,6 @@
+/.devcontainer.json
+/.dlinct.sh.bak
+/.dockerignore
+/docker-run-example.sh
+/genome
+/samplelist.txt

@@ -1,0 +1,124 @@
+#!/bin/bash
+version=1.2
+echo SOFTWARE VERSION $version
+
+
+ARGS=$(getopt -a --options d:l:g:a:t:m:v:h --long "dir:,list:,genome:,annot:,threads:,mapqual:,version:,help" -- "$@")
+
+# Constant or default variables ""
+appdir=$(echo $PWD)
+threads=2
+mapcutoff=70
+progfile=$appdir/scripts/vlookup.awk
+
+set -e
+
+usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT -gatm] | [-h] | [-v]
+
+Discovery of Long Intergenic Non-Coding Transcripts:
+    -d  <path>  Directory to which the results will be outputed to
+    -l  <file>  File with list of SRA accession numbers one per line (requires final line to be blank)
+    -g  <file>  (OPTIONAL) File in .fa format of the genome sequence to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build
+    -a  <file>  (OPTIONAL) File in .gtf format of the genome annotation to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build
+    -t  <int>   (OPTIONAL) Number of threads to use during discovery (default is 2)
+    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 70)
+    -v          Show software version and additional info
+    -h          Show this help message and exit"
+
+options='d:l:t:m:h'
+while getopts $options option; do
+  case "$option" in
+    d) workdir=$(readlink -f $OPTARG'/');;
+    l) sra=$(readlink -f $OPTARG);;
+    g) genome=$(readlink -f $OPTARG);;
+    a) annot=$(readlink -f $OPTARG);;
+    t) threads=$OPTARG;;
+    m) mapcutoff=$OPTARG;;
+    v) echo "Software version $version. Dockerized pipeline and analysis for Discovering Long Intergenic Non-Coding Transcripts in Drosophila melanogaster.\n Developer: Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>"; exit;;
+    h) echo "$usage"; exit;;
+    :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
+   \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
+  esac
+done
+
+# mandatory arguments
+if [ ! "$workdir" ] || [ ! "$sra" ]; then
+  echo "Mandatory arguments -d and -l must be provided"
+  echo "$usage" >&2; exit 1
+fi
+
+if ! [[ -d "$workdir" ]]; then
+  mkdir $workdir
+fi
+
+# Test if variables are what they are suposed to be #
+int='^[0-9]+$'
+
+if ! [[ -d $workdir ]]; then
+  echo "-d must be a DIRECTORY to output results and temp files"
+  echo "$usage" >&2; exit 1
+elif ! [[ -f $sra ]]; then
+  echo "-l must be a FILE, usually a .txt file, with SRA accession numbers (SRR######, one per line, last line required to be empty)"
+  echo "$usage" >&2; exit 1
+elif ! [[ $threads =~ $int ]]; then
+  echo "-t must be an INTEGER with the number of threads to be created during the process (recomended max = number of cores)"
+  echo "$usage" >&2; exit 1
+elif ! [[ $mapcutoff =~ $int ]]; then
+  echo "-m must be an INTEGER defining the minimum percentage of aligned reads for a run to be considered for transcriptome assembly"
+  echo "$usage" >&2; exit 1
+fi
+
+# Checking if user supplied genome/annotation files
+if [[ -z $genome ]]; then
+  if ! [[ -z $annot ]]; then
+    echo "To avoid compatibility errors .fa and .gtf files should com from same assembly. Using pre-built genome assembly"
+    bash $appdir/scripts/get-genome.sh $appdir
+    genome=$appdir/genome/dm6.fa
+    annot=$appdir/genome/dm6.gtf
+  else
+    bash $appdir/scripts/get-genome.sh $appdir
+    genome=$appdir/genome/dm6.fa
+    annot=$appdir/genome/dm6.gtf
+  fi
+else
+  if [[ -z $annot ]];then
+    echo "To avoid compatibility errors .fa and .gtf files should com from same assembly. Using pre-built genome assembly"
+    bash $appdir/scripts/get-genome.sh $appdir
+    genome=$appdir/genome/dm6.fa
+    annot=$appdir/genome/dm6.gtf
+  else
+    if ! [[ -f $annot ]]; then
+      echo "-a must be a FILE in the .gtf format"
+      echo "$usage" >&2; exit 1
+    elif ! [[ -f $genome ]]; then
+      echo "-g must be a FILE in the .fa format"
+      echo "$usage" >&2; exit 1
+    else
+      echo "Using user supplied Genome/Annoation assembly"
+      rm -rf $appdir/genome/dm6*
+      cp -f $genome $appdir/genome/dm6.fa
+      cp -f $annot $appdir/genome/dm6.gtf
+    fi
+  fi
+fi
+
+bash $appdir/scripts/build-index.sh $appdir $threads
+wait
+
+bash $appdir/scripts/get-sra-info.sh $workdir $sra
+wait
+
+bash $appdir/scripts/map-sra-list.sh $workdir $sra $threads $appdir
+wait
+
+bash $appdir/scripts/pre-process-mapping-stats.sh $workdir
+wait
+
+python3 $appdir/scripts/map-stats.py $mapcutoff $workdir
+sra2=$workdir/results/filtered_list.txt
+wait
+
+bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
+wait
+
+bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
