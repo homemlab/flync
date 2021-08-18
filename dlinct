@@ -1,19 +1,19 @@
 #!/bin/bash
 version=1.2
-echo SOFTWARE VERSION $version
+
+set -e
+echo -e '\n'SOFTWARE VERSION $version'\n'
 
 
-ARGS=$(getopt -a --options d:l:g:a:t:m:v:h --long "dir:,list:,genome:,annot:,threads:,mapqual:,version:,help" -- "$@")
+ARGS=$(getopt -a --options d:l:g:a:t:m:h --long "dir:,list:,genome:,annot:,threads:,mapqual:,help" -- "$@")
 
 # Constant or default variables ""
-appdir=$(echo $PWD)
+appdir=/bin/app
 threads=2
 mapcutoff=70
 progfile=$appdir/scripts/vlookup.awk
 
-set -e
-
-usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT -gatm] | [-h] | [-v]
+usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT -gatm] | [-h]
 
 Discovery of Long Intergenic Non-Coding Transcripts:
     -d  <path>  Directory to which the results will be outputed to
@@ -22,7 +22,6 @@ Discovery of Long Intergenic Non-Coding Transcripts:
     -a  <file>  (OPTIONAL) File in .gtf format of the genome annotation to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build
     -t  <int>   (OPTIONAL) Number of threads to use during discovery (default is 2)
     -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 70)
-    -v          Show software version and additional info
     -h          Show this help message and exit"
 
 options='d:l:t:m:h'
@@ -34,7 +33,6 @@ while getopts $options option; do
     a) annot=$(readlink -f $OPTARG);;
     t) threads=$OPTARG;;
     m) mapcutoff=$OPTARG;;
-    v) echo "Software version $version. Dockerized pipeline and analysis for Discovering Long Intergenic Non-Coding Transcripts in Drosophila melanogaster.\n Developer: Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>"; exit;;
     h) echo "$usage"; exit;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
