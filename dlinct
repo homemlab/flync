@@ -1,11 +1,14 @@
 #!/bin/bash
-version=1.2
+version=1.3
+
+Built with Ensembl BDGP6.32 release '('D. melanogaster')'
 
 set -e
 echo -e '\n'SOFTWARE VERSION $version'\n'
+echo -e "Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>\n"
 
 
-ARGS=$(getopt -a --options d:l:g:a:t:m:h --long "dir:,list:,genome:,annot:,threads:,mapqual:,help" -- "$@")
+ARGS=$(getopt -a --options d:l:s:g:a:t:m:h --long "dir:,list:,split:,genome:,annot:,threads:,mapqual:,help" -- "$@")
 
 # Constant or default variables ""
 appdir=/bin/app
@@ -13,22 +16,37 @@ threads=2
 mapcutoff=70
 progfile=$appdir/scripts/vlookup.awk
 
-usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT -gatm] | [-h]
+usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT ARGS -sgatm] | [-h]
 
 Discovery of Long Intergenic Non-Coding Transcripts:
-    -d  <path>  Directory to which the results will be outputed to
-    -l  <file>  File with list of SRA accession numbers one per line (requires final line to be blank)
-    -g  <file>  (OPTIONAL) File in .fa format of the genome sequence to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build
-    -a  <file>  (OPTIONAL) File in .gtf format of the genome annotation to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build
-    -t  <int>   (OPTIONAL) Number of threads to use during discovery (default is 2)
-    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 70)
-    -h          Show this help message and exit"
+    -d  <path>  Directory to which the results will be outputed to.
 
-options='d:l:t:m:h'
+    -l  <file>  File with list of SRA accession numbers one per line.
+    
+    -s  <str>   (OPTIONAL) Split mode: Run specific parts of the analysis pipeline. Available options are:
+                  [map] : Download and map reads against the provided accessions.
+                  [map-stats] : Preform the analysis of the mapping statistics and prepares files for assembly step.
+                                (Requires [map] to be run beforehand).
+                  [assembly] : Perform assembly step and coding probability assessment. Also outputs final results. 
+                                (Requires [map] & [map-stats]).
+                  [clean] : Intended to remove unecessary files after complete run. Will delete data/ folder.
+    
+    -g  <file>  (OPTIONAL) File in .fa format of the genome sequence to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build.
+    
+    -a  <file>  (OPTIONAL) File in .gtf format of the genome annotation to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build.
+    
+    -t  <int>   (OPTIONAL) Number of threads to use during discovery (default is 2).
+    
+    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 70).
+    
+    -h          Show this help message and exit."
+
+options='d:l:s:g:a:t:m:h'
 while getopts $options option; do
   case "$option" in
     d) workdir=$(readlink -f $OPTARG'/');;
     l) sra=$(readlink -f $OPTARG);;
+    s) mode=$OPTARG;;
     g) genome=$(readlink -f $OPTARG);;
     a) annot=$(readlink -f $OPTARG);;
     t) threads=$OPTARG;;
@@ -71,19 +89,19 @@ if [[ -z $genome ]]; then
   if ! [[ -z $annot ]]; then
     echo "To avoid compatibility errors .fa and .gtf files should com from same assembly. Using pre-built genome assembly"
     bash $appdir/scripts/get-genome.sh $appdir
-    genome=$appdir/genome/dm6.fa
-    annot=$appdir/genome/dm6.gtf
+    genome=$appdir/genome/genome.fa
+    annot=$appdir/genome/genome.gtf
   else
     bash $appdir/scripts/get-genome.sh $appdir
-    genome=$appdir/genome/dm6.fa
-    annot=$appdir/genome/dm6.gtf
+    genome=$appdir/genome/genome.fa
+    annot=$appdir/genome/genome.gtf
   fi
 else
   if [[ -z $annot ]];then
     echo "To avoid compatibility errors .fa and .gtf files should com from same assembly. Using pre-built genome assembly"
     bash $appdir/scripts/get-genome.sh $appdir
-    genome=$appdir/genome/dm6.fa
-    annot=$appdir/genome/dm6.gtf
+    genome=$appdir/genome/genome.fa
+    annot=$appdir/genome/genome.gtf
   else
     if ! [[ -f $annot ]]; then
       echo "-a must be a FILE in the .gtf format"
@@ -94,29 +112,45 @@ else
     else
       echo "Using user supplied Genome/Annoation assembly"
       rm -rf $appdir/genome/dm6*
-      cp -f $genome $appdir/genome/dm6.fa
-      cp -f $annot $appdir/genome/dm6.gtf
+      cp -f $genome $appdir/genome/genome.fa
+      cp -f $annot $appdir/genome/genome.gtf
     fi
   fi
 fi
 
-bash $appdir/scripts/build-index.sh $appdir $threads
-wait
-
-bash $appdir/scripts/get-sra-info.sh $workdir $sra
-wait
-
-bash $appdir/scripts/map-sra-list.sh $workdir $sra $threads $appdir
-wait
-
-bash $appdir/scripts/pre-process-mapping-stats.sh $workdir
-wait
-
-python3 $appdir/scripts/map-stats.py $mapcutoff $workdir
-sra2=$workdir/results/filtered_list.txt
-wait
-
-bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
-wait
-
-bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
+if [[ $mode = "map" ]]; then
+  bash $appdir/scripts/build-index.sh $appdir $threads
+  wait
+  bash $appdir/scripts/get-sra-info.sh $workdir $sra
+  wait
+  bash $appdir/scripts/map-sra-list.sh $workdir $sra $threads $appdir
+elif [[ $mode = "map-stats" ]]; then
+  bash $appdir/scripts/pre-process-mapping-stats.sh $workdir
+  wait
+  python3 $appdir/scripts/map-stats.py $mapcutoff $workdir
+elif [[ $mode = "assembly" ]]; then
+  sra2=$workdir/results/filtered_list.txt
+  bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
+  wait
+  bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
+elif [[ $mode = "clean" ]]; then
+  rm -rf $workdir/data
+elif [[ -z $mode ]]; then
+  bash $appdir/scripts/build-index.sh $appdir $threads
+  wait
+  bash $appdir/scripts/get-sra-info.sh $workdir $sra
+  wait
+  bash $appdir/scripts/map-sra-list.sh $workdir $sra $threads $appdir
+  wait
+  bash $appdir/scripts/pre-process-mapping-stats.sh $workdir
+  wait
+  python3 $appdir/scripts/map-stats.py $mapcutoff $workdir
+  sra2=$workdir/results/filtered_list.txt
+  wait
+  bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
+  wait
+  bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
+else
+  echo "Available options for -s/--split are: [map], [map-stats], [assembly] or [clean]"
+  echo "Run dlinct -h to get help message. To run whole analysis remove -s/--split flag" >&2; exit 1
+fi

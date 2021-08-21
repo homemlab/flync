@@ -1,12 +1,23 @@
 #!/bin/bash
 
 apt-get update && export DEBIAN_FRONTEND=noninteractive \
-&& apt install --assume-yes ncbi-entrez-direct samtools hisat2 stringtie cufflinks wget curl pip default-jre unzip locales r-base r-base-dev
+&& apt install --no-install-recommends --assume-yes ncbi-entrez-direct samtools hisat2 stringtie cufflinks wget curl pip default-jre unzip locales r-base r-base-dev bioperl cpanminus r-cran-randomforest
 
 # Install FastQC
 curl -o /usr/bin/fastqc.zip https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.9.zip
 unzip -d /usr/bin /usr/bin/fastqc.zip
 chmod 755 /usr/bin/FastQC/fastqc
+
+# Install FEELnc
+cd /bin
+git clone https://github.com/tderrien/FEELnc.git
+
+# Install Fasta-ushuffle
+cd /bin
+git clone git://github.com/agordon/fasta_ushuffle.git
+cd fasta_ushuffle
+make
+cp fasta_ushuffle ushuffle /bin
 
 # Fixing perl locale setting error
 echo 'LANGUAGE=en_US.UTF-8' >> /etc/default/locale

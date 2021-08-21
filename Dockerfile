@@ -10,6 +10,16 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && . /bin/app/scripts/install-sratoolkit-stack.sh \
     && chmod 755 /bin/app/dlinct
 
-ENV PATH="/usr/bin/FastQC:/bin/app:${PATH}"
+RUN ["cpanm", "https://cpan.metacpan.org/authors/id/S/SZ/SZABGAB/Parallel-ForkManager-1.07.tar.gz"]
+
+RUN ["cpanm", "Bio::DB::SeqFeature::Store"]
+
+RUN R -e "install.packages('ROCR',dependencies=TRUE)"
+
+ENV FEELNCPATH="/bin/FEELnc"
+
+ENV PERL5LIB="$PERL5LIB:${FEELNCPATH}/lib/"
+
+ENV PATH="${FEELNCPATH}/bin/LINUX/:${FEELNCPATH}/scripts/:${FEELNCPATH}/utils/:/usr/bin/FastQC:/bin/app:${PATH}"
 
 CMD ["/bin/bash"]

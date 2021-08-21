@@ -8,7 +8,7 @@ workdir=$1
 progfile=$2
 cd $workdir
 cutoff=$(grep 'Cutoff' cpat/fly_cutoff.txt | sed 's@^[^0-9]*\([0-9]\+\)*@\1@')
-echo cpat cutoff is: $cutoff
+echo cpat cutoff is: $cutoff'('D. melanogaster - see CPAT docs')'
 
 ### Save the 'u'-tagged assembled transcripts '('candidate novel lincRNAs')' supported by read coverage
 grep -w "u" $workdir/assemblies/cuffcomp.gtf.merged.gtf.tmap | sort -n -k 10 > results/candidate-assembled-lincRNAs.tsv
@@ -25,7 +25,7 @@ sort -t . -k 2 -n results/candidate-assembled-lincRNAs.tsv > results/candidate-a
 ### This latter file is a list of non-coding transcripts that can now be used as reference to search new lncRNAs
 awk -f $progfile cpat/cpat.non-coding.sorted.txt results/candidate-assembled-lincRNAs.sorted.tsv > results/new-lincRNAs.tsv
 
-### This lines will extract extract the stringtie ids from the new-lincRNAs.tsv info and use it as a pattern to filter the merged.gtf to a final lincRNA.gtf
+### These lines will extract extract the stringtie ids from the new-lincRNAs.tsv info and use it as a pattern to filter the merged.gtf to a final lincRNA.gtf
 awk '{print $5}' results/new-lincRNAs.tsv > results/new-lincRNA-ids.txt
 grep -f results/new-lincRNA-ids.txt assemblies/merged.gtf > results/new-lincRNAs.gtf
 
