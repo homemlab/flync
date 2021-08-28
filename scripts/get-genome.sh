@@ -31,7 +31,7 @@ fi
 
 if ! [ $(grep --count ncRNA genome.gtf) == 0 ]; then
     grep ncRNA genome.gtf > genome.ncrna.gtf
-    grep protein_coding.gtf > genome.cds.gtf
+    grep protein_coding genome.gtf > genome.cds.gtf
 fi
 
 if ! [ -f 'genome.ncrna.fa' ]
