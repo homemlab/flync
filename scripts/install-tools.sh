@@ -1,7 +1,7 @@
 #!/bin/bash
 
 apt-get update && export DEBIAN_FRONTEND=noninteractive \
-&& apt install --no-install-recommends --assume-yes git ncbi-entrez-direct samtools hisat2 stringtie cufflinks wget curl pip default-jre unzip locales r-base r-base-dev bioperl cpanminus r-cran-randomforest
+&& apt install --assume-yes git ncbi-entrez-direct hisat2 samtools stringtie cufflinks wget curl pip default-jre unzip locales r-base r-base-dev bioperl cpanminus r-cran-randomforest
 
 # Install FastQC
 curl -o /usr/bin/fastqc.zip https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.9.zip

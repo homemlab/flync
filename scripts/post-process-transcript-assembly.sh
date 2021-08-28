@@ -8,7 +8,7 @@ workdir=$1
 progfile=$2
 cd $workdir
 cutoff=$(grep 'Cutoff' cpat/fly_cutoff.txt | sed 's@^[^0-9]*\([0-9]\+\)*@\1@')
-echo cpat cutoff is: $cutoff'('D. melanogaster - see CPAT docs')'
+echo cpat cutoff is: $cutoff '('D. melanogaster - see CPAT docs')'
 
 ### Save the 'u'-tagged assembled transcripts '('candidate novel lincRNAs')' supported by read coverage
 grep -w "u" $workdir/assemblies/cuffcomp.gtf.merged.gtf.tmap | sort -n -k 10 > results/candidate-assembled-lincRNAs.tsv
