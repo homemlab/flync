@@ -11,7 +11,7 @@ mkdir assemblies &> /dev/null
 while read i
 do
    echo ----- TRANSCRIPTOME ASSEMBLY OF $i -----
-   stringtie $workdir/data/$i/$i'.sorted.bam' -G $appdir/genome/genome.gtf -o $workdir/assemblies/$i'.rna.gtf' 2> $workdir/assemblies/stringtie.out.txt 1> /dev/null
+   stringtie --conservative $workdir/data/$i/$i'.sorted.bam' -G $appdir/genome/genome.gtf -o $workdir/assemblies/$i'.rna.gtf' 2> $workdir/assemblies/stringtie.out.txt 1> /dev/null
    echo 'Done'
 done < $sra
 
@@ -23,10 +23,6 @@ cd assemblies
 ls | grep '.rna.gtf$' | perl -ne 'print "$workdir$_"' > gtf-to-merge.txt
 stringtie --merge $workdir/assemblies/gtf-to-merge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/merged.gtf 2> stringtie-merge.out.txt 1> /dev/null
 echo 'Done'
-
-## Clean-up
-rm -rf gtf-to-merge.txt
-rm -rf *.rna.gtf
 
 cd ..
 
@@ -44,13 +40,24 @@ mkdir cpat &> /dev/nul
 cd cpat
 ## Get Dmel CPAT files
 # logitModel
-wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/Fly_logitModel.RData/download -O Fly_logitModel.RData
+if [ ! -e Fly_logitModel.RData ]; then
+   wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/Fly_logitModel.RData/download -O Fly_logitModel.RData
+fi
+
 # hexamer.tsv
-wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_Hexamer.tsv/download -O fly_Hexamer.tsv
+if [ ! -e fly_Hexamer.tsv ]; then
+   wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_Hexamer.tsv/download -O fly_Hexamer.tsv
+fi
+
 # fly_cutoff - probability cpat values below this cutoff are considered non-coding
-wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_cutoff.txt/download -O fly_cutoff.txt
+if [ ! -e fly_cutoff.txt ]; then
+   wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_cutoff.txt/download -O fly_cutoff.txt
+fi
 
 ## Run CPAT - Minimum ORF size = 25; Top ORFs to retain =1 
-cpat.py --verbose false -x $workdir/cpat/fly_Hexamer.tsv -d $workdir/cpat/Fly_logitModel.RData -g $workdir/assemblies/assembled-transcripts.fa -o $workdir/cpat/cpat --min-orf 25 --top-orf 1 2> cpat.outtxt 1> /dev/null
+echo ----- RUNNING CODING PROBABILITY -----
+if [ ! -e cpat.ORF_prob.best.tsv ]; then
+   cpat.py --verbose false -x $workdir/cpat/fly_Hexamer.tsv -d $workdir/cpat/Fly_logitModel.RData -g $workdir/assemblies/assembled-transcripts.fa -o $workdir/cpat/cpat --min-orf 25 --top-orf 1 2> cpat.outtxt 1> /dev/null
+fi
 echo 'Done'
 echo 'Assembly and coding probability done'
