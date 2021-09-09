@@ -7,14 +7,12 @@ COPY . /bin/app
 RUN export DEBIAN_FRONTEND=noninteractive \
     && apt update \
     && . /bin/app/scripts/install-tools.sh \
-    && . /bin/app/scripts/install-sratoolkit-stack.sh \
+    && . /bin/app/scripts/install-sratoolkit.sh \
     && chmod 755 /bin/app/dlinct
 
 RUN ["cpanm", "https://cpan.metacpan.org/authors/id/S/SZ/SZABGAB/Parallel-ForkManager-1.07.tar.gz"]
 
 RUN ["cpanm", "Bio::DB::SeqFeature::Store"]
-
-RUN R -e "install.packages('ROCR',dependencies=TRUE)"
 
 ENV FEELNCPATH="/bin/FEELnc"
 

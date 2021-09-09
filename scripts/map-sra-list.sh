@@ -15,7 +15,7 @@ while read i
 do
     mkdir data/$i &> /dev/null
     echo ----- DOWNLOADING READS $i -----
-    if ! [ -e data/$i/*'.fastq' ]; then
+    if ! [ -e data/$i/*'.fastq'* ]; then
         ## Faster:
         fasterq-dump -f -3 -p -e $threads -O $workdir/data/$i $i
         if ! [ -e data/$i/*'.fastq.gz' ]; then

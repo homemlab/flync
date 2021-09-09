@@ -29,6 +29,14 @@ else
     gzip -v -d --force genome.gtf.gz
 fi
 
+if [ -f 'genome.cdna.fa' ]
+then
+    echo '!!!WARNING!!! Transcriptome already downloaded. Skipping step.'
+else
+    wget -q 'http://ftp.ensembl.org/pub/release-104/fasta/drosophila_melanogaster/cdna/Drosophila_melanogaster.BDGP6.32.cdna.all.fa.gz' -O genome.cdna.fa.gz
+    gzip -v -d --force genome.cdna.fa.gz
+fi
+
 if ! [ $(grep --count ncRNA genome.gtf) == 0 ]; then
     grep ncRNA genome.gtf > genome.ncrna.gtf
     grep protein_coding genome.gtf > genome.cds.gtf
