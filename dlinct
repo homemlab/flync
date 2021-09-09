@@ -1,5 +1,5 @@
 #!/bin/bash
-version=1.4
+version=1.6.0
 
 echo -e '\n'Built with Ensembl BDGP6.32 release '('D. melanogaster')'
 
@@ -8,12 +8,12 @@ echo -e '\n'SOFTWARE VERSION $version'\n'
 echo -e "Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>\n"
 
 
-ARGS=$(getopt -a --options d:l:s:g:a:t:m:h --long "dir:,list:,split:,genome:,annot:,threads:,mapqual:,help" -- "$@")
+ARGS=$(getopt -a --options d:l:s:g:a:t:m:c:h --long "dir:,list:,split:,genome:,annot:,threads:,mapqual:,csvfile:,help" -- "$@")
 
 # Constant or default variables ""
 appdir=/bin/app
 threads=2
-mapcutoff=70
+mapcutoff=50
 progfile=$appdir/scripts/vlookup.awk
 
 usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT ARGS -sgatm] | [-h]
@@ -29,6 +29,8 @@ Discovery of Long Intergenic Non-Coding Transcripts:
                                 (Requires [map] to be run beforehand).
                   [assembly] : Perform assembly step and coding probability assessment. Also outputs final results.
                                 (Requires [map] & [map-stats]).
+                  [kall] : Perform the whole pipeline and run a pseudoalignment against the newly discovered lincRNAs.
+                                (Requires -c <metadata.csv>)
                   [clean] : Intended to remove unecessary files after complete run. Will delete data/ folder.
 
     -g  <file>  (OPTIONAL) File in .fa format of the genome sequence to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build.
@@ -37,11 +39,11 @@ Discovery of Long Intergenic Non-Coding Transcripts:
 
     -t  <int>   (OPTIONAL) Number of threads to use during discovery (default is 2).
 
-    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 70).
+    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 50).
 
     -h          Show this help message and exit."
 
-options='d:l:s:g:a:t:m:h'
+options='d:l:s:g:a:t:m:c:h'
 while getopts $options option; do
   case "$option" in
     d) workdir=$(readlink -f $OPTARG'/');;
@@ -51,6 +53,7 @@ while getopts $options option; do
     a) annot=$(readlink -f $OPTARG);;
     t) threads=$OPTARG;;
     m) mapcutoff=$OPTARG;;
+    c) metadata=$(readlink -f $OPTARG);;
     h) echo "$usage"; exit;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
@@ -132,9 +135,42 @@ elif [[ $mode = "assembly" ]]; then
   sra2=$workdir/results/filtered_list.txt
   bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
   wait
+  bash $appdir/scripts/coding-prob.sh $workdir
+  wait
   bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
 elif [[ $mode = "clean" ]]; then
   rm -rf $workdir/data
+elif [[ $mode = "kall" ]]; then
+  if [ ! "$metadata" ]; then
+    echo "Mandatory arguments -c must be provided"
+    echo "$usage" >&2; exit 1
+  else
+    bash $appdir/scripts/build-index.sh $appdir $threads
+    wait
+    bash $appdir/scripts/get-sra-info.sh $workdir $sra
+    wait
+    bash $appdir/scripts/map-sra-list.sh $workdir $sra $threads $appdir
+    wait
+    bash $appdir/scripts/pre-process-mapping-stats.sh $workdir
+    wait
+    python3 $appdir/scripts/map-stats.py $mapcutoff $workdir
+    sra2=$workdir/results/filtered_list.txt
+    wait
+    bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
+    wait
+    bash $appdir/scripts/coding-prob.sh $workdir
+    wait
+    bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
+    wait
+    bash $appdir/scripts/kallisto.sh $workdir $sra2 $appdir $threads
+    wait
+    bash $appdir/scripts/pre-process-sleuth.sh $workdir $sra2 $metadata
+    metadata2=$workdir/results_dea/metadata.csv
+    wait
+    echo $workdir
+    echo $metadata2
+    Rscript $appdir/scripts/sleuth.r $workdir $metadata2
+  fi
 elif [[ -z $mode ]]; then
   bash $appdir/scripts/build-index.sh $appdir $threads
   wait
@@ -149,8 +185,12 @@ elif [[ -z $mode ]]; then
   wait
   bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
   wait
+  bash $appdir/scripts/coding-prob.sh $workdir
+  wait
   bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
 else
-  echo "Available options for -s/--split are: [map], [map-stats], [assembly] or [clean]"
+  echo "Available options for -s/--split are: [map], [map-stats], [assembly], [clean] or [kall]"
   echo "Run dlinct -h to get help message. To run whole analysis remove -s/--split flag" >&2; exit 1
 fi
+
+cp $workdir/assemblies/merged.gtf $workdir/results/merged-assembly.gtf

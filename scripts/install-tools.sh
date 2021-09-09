@@ -1,7 +1,7 @@
 #!/bin/bash
 
-apt-get update && export DEBIAN_FRONTEND=noninteractive \
-&& apt install --assume-yes git ncbi-entrez-direct hisat2 samtools stringtie cufflinks wget curl pip default-jre unzip locales r-base r-base-dev bioperl cpanminus r-cran-randomforest
+apt update && export DEBIAN_FRONTEND=noninteractive \
+&& apt install --assume-yes git ncbi-entrez-direct hisat2 samtools stringtie cufflinks wget bc curl pip default-jre unzip locales r-base r-base-dev bioperl cpanminus r-cran-randomforest kallisto
 
 # Install FastQC
 curl -o /usr/bin/fastqc.zip https://www.bioinformatics.babraham.ac.uk/projects/fastqc/fastqc_v0.11.9.zip
@@ -32,3 +32,10 @@ locale-gen en_US.UTF-8
 
 # Installing required python packages
 pip3 install pandas numpy matplotlib seaborn CPAT
+
+# Installing required R packages
+R -e "install.packages('ROCR',dependencies=TRUE)"
+R -e "install.packages('BiocManager',dependencies=TRUE)"
+R -e "BiocManager::install('devtools',dependencies=TRUE,update=TRUE,ask=FALSE)"
+R -e "BiocManager::install('remote',dependencies=TRUE,update=TRUE,ask=FALSE)"
+R -e "BiocManager::install('pachterlab/sleuth',dependencies=TRUE,update=TRUE,ask=FALSE)"
