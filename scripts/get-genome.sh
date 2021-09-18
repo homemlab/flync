@@ -48,3 +48,6 @@ fi
 # Get only transcript and exon level features on gtf to ML-model
 grep -v -P "\t"gene"\t" genome.lncrna.gtf > genome.lncrna.transOnly.gtf
 cat genome.not.lncrna.gtf | grep -v -P "\t"gene"\t" | grep -v -P "\t"CDS"\t" | grep -v -P "\t"three_prime_utr"\t" | grep -v -P "\t"five_prime_utr"\t" | grep -v -P "\t"Selenocysteine"\t" > genome.not.lncrna.transOnly.gtf
+
+bash $appdir/gtf-to-bed.sh genome.lncrna.transOnly.gtf
+bash $appdir/gtf-to-bed.sh genome.not.lncrna.transOnly.gtf
