@@ -1,0 +1,13 @@
+CAGE_neg	/bin/app/test/features/CAGE_neg.tsv
+CAGE_neg_whole_trans	/bin/app/test/features/CAGE_neg_whole_trans.tsv
+CAGE_pos	/bin/app/test/features/CAGE_pos.tsv
+CAGE_pos_whole_trans	/bin/app/test/features/CAGE_pos_whole_trans.tsv
+GCcont	/bin/app/test/features/GCcont.tsv
+H3K4me3_S2	/bin/app/test/features/H3K4me3_S2.tsv
+JASPAR_TF	/bin/app/test/features/JASPAR_TF.tsv
+phastCons27	/bin/app/test/features/phastCons27.tsv
+phyloP124	/bin/app/test/features/phyloP124.tsv
+phyloP27	/bin/app/test/features/phyloP27.tsv
+Pol2_S2	/bin/app/test/features/Pol2_S2.tsv
+ReMap	/bin/app/test/features/ReMap.tsv
+RNAfold	/bin/app/test/features/RNAfold.tsv
