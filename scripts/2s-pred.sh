@@ -18,16 +18,20 @@ if [ ! -e $output/seq_to_strct.fa ]; then
     # gffread -w $output/seq_to_strct.fa -g $appdir/genome/genome.fa $output/seq_to_strct.gtf
 fi
 
-mkdir 2ndS &> /dev/null
-cd 2ndS
-
 #Run RNAfold on newly discovered sequences
 
-RNAfold -T $temp --noPS --jobs=4 $output/seq_to_strct.fa > $output/RNAfold.2s
+while read i
+do 
+    if [ $(echo $i | grep '>' | wc -l) == 1 ]; then
+        echo $i > seq.fa
+    else echo $i >> seq.fa
+        RNAfold -T $temp --noPS -i seq.fa >> $output/RNAfold.2s
+    fi
+done < $output/seq_to_strct.fa
 wait
 
 cat $output/RNAfold.2s | grep '>' | sed 's/>//' | sed 's/([^~]*)//g' > names.tmp
-cat $output/RNAfold.2s | grep ' ' | awk -F '[ ]' '{print $(2)}' | awk -F '[(]' '{print $(2)}' | awk -F '[)]' '{print $(NF-1)}' > mfe.tmp
+cat $output/RNAfold.2s | grep ' ' | awk -F '[-]' '{print "-"$(2)}' | sed 's/)//g' > mfe.tmp
 
 wait
 ## Prepare RNAfold output table

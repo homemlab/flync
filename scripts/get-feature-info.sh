@@ -49,13 +49,11 @@ do
             name=$(echo $s | cut -f4 -d' ')
             strd=$(echo $s | cut -f6 -d ' ')
             if [ $strd == '+' ]; then
-                startPosTSS=$( bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=max )
-                endPosTSS=''
-                echo -e $name'\t'$startPosTSS'\t'$endPosTSS >> $output/$track'.tsv'
+                startPosTSS=$(bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=max)
+                echo -e $name'\t'$startPosTSS >> $output/$track'.tsv'
             elif [ $strd == '.' ]; then
                 startPosTSS=$(bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=max)
-                endPosTSS=$(bigWigSummary $url $chr $endNegOff $endPosOff 1 -type=max)
-                echo -e $name'\t'$startPosTSS'\t'$endPosTSS >> $output/$track'.tsv'
+                echo -e $name'\t'$startPosTSS >> $output/$track'.tsv'
             fi
         done < $bed
     elif [[ "$track" == 'CAGE_neg' ]]; then
@@ -72,13 +70,11 @@ do
             name=$(echo $s | cut -f4 -d' ')
             strd=$(echo $s | cut -f6 -d ' ')
             if [ $strd == '-' ]; then
-                startNegTSS=''
                 endNegTSS=$(bigWigSummary $url $chr $endNegOff $endPosOff 1 -type=min)
-                echo -e $name'\t'$startPosTSS'\t'$endPosTSS >> $output/$track'.tsv'
+                echo -e $name'\t'$endNegTSS >> $output/$track'.tsv'
             elif [ $strd == '.' ]; then
-                startNegTSS=$(bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=min)
                 endNegTSS=$(bigWigSummary $url $chr $endNegOff $endPosOff 1 -type=min)
-                echo -e $name'\t'$startNegTSS'\t'$endNegTSS >> $output/$track'.tsv'
+                echo -e $name'\t'$endNegTSS >> $output/$track'.tsv'
             fi
         done < $bed
     fi
