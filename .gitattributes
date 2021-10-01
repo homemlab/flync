@@ -7,3 +7,4 @@
 *.gtf filter=lfs diff=lfs merge=lfs -text
 *.bed filter=lfs diff=lfs merge=lfs -text
 *.ht2 filter=lfs diff=lfs merge=lfs -text
+*.sav filter=lfs diff=lfs merge=lfs -text

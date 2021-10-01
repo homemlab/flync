@@ -51,10 +51,10 @@ for i in range(len(readin)):
         df_tf.columns=bb_cols
     elif readin.iloc[i,0] == 'CAGE_pos':
         df_posTSS=pd.read_csv(readin.iloc[i,1], delimiter='\t', header=None)
-        df_posTSS.columns=["name", "startPosTSS", "endPosTSS"]
+        df_posTSS.columns=["name", "startPosTSS"]
     elif readin.iloc[i,0] == 'CAGE_neg':
         df_negTSS=pd.read_csv(readin.iloc[i,1], delimiter='\t', header=None, na_values=0)
-        df_negTSS.columns=["name", "startNegTSS", "endNegTSS"]
+        df_negTSS.columns=["name", "endNegTSS"]
     elif readin.iloc[i,0] == 'RNAfold':
         df_2s=pd.read_csv(readin.iloc[i,1], delimiter='\t', header=None, na_values=0)
         df_2s.columns=["name", "mfe"]
@@ -105,11 +105,11 @@ features = append_all_cols(features, df_posTSS, 'name')
 features = append_all_cols(features, df_negTSS, 'name')
 
 # Find bes TSS from the positive and negative TSS values arround 5' and 3' of transcript
-tss_peak = features[["startPosTSS", "endPosTSS", "startNegTSS", "endNegTSS"]]
+tss_peak = features[["startPosTSS", "endNegTSS"]]
 tss_peak = abs(tss_peak)
 tss_peak = tss_peak.max(axis=1)
 features["bestTSS"] = tss_peak
-features.drop(columns=["startPosTSS", "endPosTSS", "startNegTSS", "endNegTSS"], inplace=True)
+features.drop(columns=["startPosTSS", "endNegTSS"], inplace=True)
 
 # Incorporate TSS peaks inside the transcript
 features = append_columns(features, df_posTSS_wt, 'name', 'max', new_col_name='PosTSS_inside')
@@ -134,6 +134,6 @@ features = append_columns(features, df_pc27, 'name', 'mean0', new_col_name='mean
 features = append_columns(features, df_pp27, 'name', 'mean0', new_col_name='mean_pPcons27')
 features = append_columns(features, df_pp124, 'name', 'mean0', new_col_name='mean_pPcons124')
 
-features.fillna(0, inplace=True)
+features.dropna(axis=0, how='any', inplace=True)
 
-features.to_csv(outpath + '/X_test.csv')
+features.to_csv(outpath + '/X_train_lncrna.csv')
