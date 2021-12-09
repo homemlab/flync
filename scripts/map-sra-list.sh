@@ -35,7 +35,7 @@ do
     echo ----- MAPPING READS $i -----
     if [ ! -e data/$i/*.sorted.bam ] && [ ! -e data/$i/*.bam ] && [ ! -e data/$i/*.sam ]; then
         lay=$(cat $workdir/results/runinfo.csv | grep $i | cut -f6 -d,)
-        if [ $lay == 'SINGLE' ]; then
+        if [[ $lay == 'SINGLE' ]]; then
             hisat2 -p $threads -x $appdir/genome/genome.idx -U $workdir/data/$i/$i'.fastq.gz' -S $workdir/data/$i/$i'.sam' --dta --known-splicesite-infile $appdir/genome/genome.sj &> $workdir/data/$i.hisat2.log
         else
             hisat2 -p $threads -x $appdir/genome/genome.idx -1 $workdir/data/$i/$i'_1.fastq.gz' -2 $workdir/data/$i/$i'_2.fastq.gz' -S $workdir/data/$i/$i'.sam' --dta --known-splicesite-infile $appdir/genome/genome.sj &> $workdir/data/$i.hisat2.log
