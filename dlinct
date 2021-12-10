@@ -1,5 +1,5 @@
 #!/bin/bash
-version=1.6.0
+version=0.7.0
 
 echo -e '\n'Built with Ensembl BDGP6.32 release '('D. melanogaster')'
 
@@ -8,7 +8,7 @@ echo -e '\n'SOFTWARE VERSION $version'\n'
 echo -e "Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>\n"
 
 
-ARGS=$(getopt -a --options d:l:s:g:a:t:m:c:h --long "dir:,list:,split:,genome:,annot:,threads:,mapqual:,csvfile:,help" -- "$@")
+ARGS=$(getopt -a --options d:l:s:g:a:t:m:c:h -- "$@")
 
 # Constant or default variables ""
 appdir=/bin/app
