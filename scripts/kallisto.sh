@@ -7,7 +7,7 @@ threads=$4
 
 cd $workdir
 
-mkdir kallisto &> /dev/null
+mkdir kallisto &> $workdir
 cd kallisto
 
 ### Extract transcript sequences from filtered .gtf file with candidate lincRNAs ###

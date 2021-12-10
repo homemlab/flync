@@ -10,10 +10,10 @@ cd $workdir
 
 ### Download and map reads from SRA accession numbers in .txt file ###
 
-mkdir data &> /dev/null
+mkdir data &> $workdir
 while read i
 do
-    mkdir data/$i &> /dev/null
+    mkdir data/$i &> $workdir
     echo ----- DOWNLOADING READS $i -----
     if [ ! -e data/$i/*.fastq.gz ] || [ ! -e data/$i/*.fastq ]; then
         ## Faster:
@@ -23,12 +23,12 @@ do
         fi
     fi    
     ## Old command:
-    #fastq-dump --gzip -O $workdir/data/$i $i 2> $workdir/data/$i/fastq.out.txt 1> /dev/null
+    #fastq-dump --gzip -O $workdir/data/$i $i 2> $workdir/data/$i/fastq.out.txt 1> $workdir
     echo 'Done'
 
     echo ----- QC REPORT OF $i -----
     if ! [ -e data/$i/*_fastqc.html ]; then
-        fastqc -t $threads $workdir/data/$i/*.fastq.gz 2> $workdir/data/$i/fastq.out.txt 1> /dev/null
+        fastqc -t $threads $workdir/data/$i/*.fastq.gz 2> $workdir/data/$i/fastq.out.txt 1> $workdir
     fi
     echo 'Done'    
     
@@ -45,9 +45,9 @@ do
 
     echo ----- CONVERTING .SAM TO INDEXED SORTED .BAM OF $i -----
     if [ ! -e data/$i/*.sorted.bam ] || [ ! -e data/$i/*.bam ]; then
-        samtools view -@ $samthr -b -o $workdir/data/$i/$i'.bam' -S $workdir/data/$i/$i'.sam' 2> $workdir/data/$i/samtools.out.txt 1> /dev/null
-        samtools sort -@ $samthr -o $workdir/data/$i/$i'.sorted.bam' $workdir/data/$i/$i'.bam' 2>> $workdir/data/$i/samtools.out.txt 1> /dev/null
-        samtools index $workdir/data/$i/$i'.sorted.bam' 2>> $workdir/data/$i/samtools.out.txt 1> /dev/null
+        samtools view -@ $samthr -b -o $workdir/data/$i/$i'.bam' -S $workdir/data/$i/$i'.sam' 2> $workdir/data/$i/samtools.out.txt 1> $workdir
+        samtools sort -@ $samthr -o $workdir/data/$i/$i'.sorted.bam' $workdir/data/$i/$i'.bam' 2>> $workdir/data/$i/samtools.out.txt 1> $workdir
+        samtools index $workdir/data/$i/$i'.sorted.bam' 2>> $workdir/data/$i/samtools.out.txt 1> $workdir
     fi
     echo 'Done'
 

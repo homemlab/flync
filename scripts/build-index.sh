@@ -3,7 +3,7 @@
 appdir=$1
 threads=$2
 cd $appdir
-mkdir genome &> /dev/null
+mkdir genome &> $workdir
 cd genome
 export HISAT2_INDEXES=$appdir/genome/
 
