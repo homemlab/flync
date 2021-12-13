@@ -1,0 +1,35 @@
+name: dlinct-dev
+channels:
+  - conda-forge
+  - bioconda
+  - r
+  - defaults
+  # - cyclus
+dependencies:
+  - sra-tools
+  - entrez-direct
+  - hisat2
+  - samtools
+  - stringtie
+  - cufflinks
+  - unzip
+  - r-base
+  - kallisto
+  - r-sleuth
+  - feelnc
+  - ucsc-bigbedsummary
+  - ucsc-bigwigsummary
+  - ucsc-bigwigaverageoverbed
+  - pip:
+    - CPAT
+    - jupyter
+    - matplotlib
+    - numpy
+    - pandas
+    - pickle-mixin
+    - seaborn
+    - scikit-learn
+    - scikit-plot
+    - shap
+    - tensorflow
+

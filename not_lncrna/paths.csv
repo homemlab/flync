@@ -1,0 +1,13 @@
+CAGE_neg,/bin/app/not_lncrna/CAGE_neg.tsv
+CAGE_neg_whole_trans,/bin/app/not_lncrna/CAGE_neg_whole_trans.tsv
+CAGE_pos,/bin/app/not_lncrna/CAGE_pos.tsv
+CAGE_pos_whole_trans,/bin/app/not_lncrna/CAGE_pos_whole_trans.tsv
+GCcont,/bin/app/not_lncrna/GCcont.tsv
+H3K4me3_S2,/bin/app/not_lncrna/H3K4me3_S2.tsv
+JASPAR_TF,/bin/app/not_lncrna/JASPAR_TF.tsv
+phastCons27,/bin/app/not_lncrna/phastCons27.tsv
+phyloP124,/bin/app/not_lncrna/phyloP124.tsv
+phyloP27,/bin/app/not_lncrna/phyloP27.tsv
+Pol2_S2,/bin/app/not_lncrna/Pol2_S2.tsv
+ReMap,/bin/app/not_lncrna/ReMap.tsv
+RNAfold,/bin/app/not_lncrna/RNAfold.tsv
