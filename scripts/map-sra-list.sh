@@ -10,10 +10,10 @@ cd $workdir
 
 ### Download and map reads from SRA accession numbers in .txt file ###
 
-mkdir data &> $workdir
+mkdir data >&2 $workdir/err.log
 while read i
 do
-    mkdir data/$i &> $workdir
+    mkdir data/$i >&2 $workdir/err.log
     echo ----- DOWNLOADING READS $i -----
     if [ ! -e data/$i/*.fastq.gz ] || [ ! -e data/$i/*.fastq ]; then
         ## Faster:

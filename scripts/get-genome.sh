@@ -2,7 +2,7 @@
 
 appdir=$1
 cd $appdir
-mkdir genome &> $workdir
+mkdir genome >&2 $workdir/err.log
 cd genome
 
 ### Download latest Drosophila melanogaster genome and annotation file ###

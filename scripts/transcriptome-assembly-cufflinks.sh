@@ -8,7 +8,7 @@ threads=$4
 cd $workdir
 
 ### Assemble transcriptome from mapped reads for each sample ###
-mkdir assemblies/cufflinks &> $workdir
+mkdir assemblies/cufflinks >&2 $workdir/err.log
 while read i
 do
    if [ ! -e $workdir/assemblies/cufflinks/$i'_cuff'/transcripts.gtf ]; then
@@ -37,7 +37,7 @@ echo 'Done'
 # cd ..
 
 # echo ----- COMPARING ASSEMBLY TO REFERENCE -----
-# mkdir cuffcompare &> $workdir
+# mkdir cuffcompare >&2 $workdir/err.log
 # ### Compare the merged assembly to the reference .gtf ###
 # if [ ! -e $workdir/cuffcompare/cuffcomp.gtf ]; then
 #    cuffcompare -R -r $appdir/genome/genome.gtf $workdir/assemblies/cufflinks/merged.gtf -o $workdir/cuffcompare/cuffcomp.gtf 2> $workdir/cuffcompare/cuffcomp.out.txt 1> $workdir

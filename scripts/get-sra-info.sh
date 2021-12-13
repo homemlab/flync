@@ -2,7 +2,7 @@
 workdir=$1
 sra=$2
 cd $workdir
-mkdir results &> $workdir
+mkdir results >&2 $workdir/err.log
 
 echo ----- EXTRACTING RUN INFOS -----
 if [ ! -e $workdir/results/runinfo.csv ]; then

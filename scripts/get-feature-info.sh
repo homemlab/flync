@@ -11,7 +11,7 @@ else
     offset=$4
 fi
 
-mkdir $output &> $workdir
+mkdir $output >&2 $workdir/err.log
 
 while read i
 do
