@@ -5,7 +5,7 @@ workdir=$1
 cd $workdir
 
 ### CPAT analysis (coding probability assessment tool) ###
-mkdir cpat &> /dev/nul
+mkdir cpat 
 cd cpat
 ## Get Dmel CPAT files
 # logitModel
