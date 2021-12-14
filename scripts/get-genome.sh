@@ -22,7 +22,7 @@ then
 else
     ### Annotation files from different DBs ###
     ## Uncomment desired annotation source   ##
-    wget -q 'http://ftp.ensembl.org/pub/release-104/gtf/drosophila_melanogaster/Drosophila_melanogaster.BDGP6.32.104.gtf.gz' -O genome.gtf.gz
+    wget -q 'http://ftp.ensembl.org/pub/release-104/gtf/drosophila_melanogaster/Drosophila_melanogaster.BDGP6.32.104.chr.gtf.gz' -O genome.gtf.gz
     #wget -q 'ftp://hgdownload.soe.ucsc.edu/goldenPath/dm6/bigZips/genes/dm6.ensGene.gtf.gz' -O genome.gtf.gz
     #wget -q "ftp://hgdownload.soe.ucsc.edu/goldenPath/dm6/bigZips/genes/dm6.ncbiRefSeq.gtf.gz" -O genome.gtf.gz
     #wget -q "ftp://hgdownload.soe.ucsc.edu/goldenPath/dm6/bigZips/genes/dm6.refGene.gtf.gz" -O genome.gtf.gz
@@ -38,20 +38,16 @@ else
 fi
 
 if ! [ $(grep --count ncRNA genome.gtf) == 0 ]; then
-    grep ncRNA genome.gtf > genome.ncrna.gtf
-    grep protein_coding genome.gtf > genome.cds.gtf
-    gffread -w genome.ncrna.fa -g genome.fa genome.ncrna.gtf
+    grep 'transcript_biotype "ncRNA"' genome.gtf > genome.lncrna.gtf
+    grep 'transcript_biotype "protein_coding"' genome.gtf > genome.cds.gtf
+    grep -v 'transcript_biotype "ncRNA"' genome.gtf > genome.not.lncrna.gtf
+    gffread -w genome.lncrna.fa -g genome.fa genome.lncrna.gtf
     gffread -w genome.cds.fa -g genome.fa genome.cds.gtf
-else
-    if ! [ -f 'genome.ncrna.fa' ]
-    then
-        wget -q 'http://ftp.ensembl.org/pub/release-104/fasta/drosophila_melanogaster/ncrna/Drosophila_melanogaster.BDGP6.32.ncrna.fa.gz' -O genome.ncrna.fa.gz
-        gzip -v -d --force genome.ncrna.fa.gz
-    fi
-
-    if ! [ -f 'genome.cds.fa' ]
-    then
-        wget -q 'http://ftp.ensembl.org/pub/release-104/fasta/drosophila_melanogaster/cds/Drosophila_melanogaster.BDGP6.32.cds.all.fa.gz' -O genome.cds.fa.gz
-        gzip -v -d --force genome.cds.fa.gz
-    fi
 fi
+
+# Get only transcript and exon level features on gtf to ML-model
+grep -v -P "\t"gene"\t" genome.lncrna.gtf > genome.lncrna.transOnly.gtf
+cat genome.not.lncrna.gtf | grep -v -P "\t"gene"\t" | grep -v -P "\t"CDS"\t" | grep -v -P "\t"three_prime_utr"\t" | grep -v -P "\t"five_prime_utr"\t" | grep -v -P "\t"Selenocysteine"\t" | grep -v -P "\t"start_codon"\t" | grep -v -P "\t"stop_codon"\t" > genome.not.lncrna.transOnly.gtf
+
+bash $appdir/scripts/gtf-to-bed.sh genome.lncrna.transOnly.gtf
+bash $appdir/scripts/gtf-to-bed.sh genome.not.lncrna.transOnly.gtf

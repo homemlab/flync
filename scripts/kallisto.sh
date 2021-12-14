@@ -11,13 +11,13 @@ mkdir kallisto &> /dev/null
 cd kallisto
 
 ### Extract transcript sequences from filtered .gtf file with candidate lincRNAs ###
-if [ ! -e $workdir/results/new-transcripts.fa ]; then
-    gffread -w $workdir/results/new-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-transcripts.gtf
+if [ ! -e $workdir/results/all-new-transcripts.fa ]; then
+    gffread -w $workdir/results/all-new-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/all-new-transcripts.gtf
 fi
 
 ### Run Kallisto index ###
-if [ ! -e $workdir/kallisto/new-transcripts.fa.idx ]; then
-    kallisto index -i $workdir/kallisto/new-transcripts.fa.idx $workdir/results/new-transcripts.fa
+if [ ! -e $workdir/kallisto/all-new-transcripts.fa.idx ]; then
+    kallisto index -i $workdir/kallisto/all-new-transcripts.fa.idx $workdir/results/all-new-transcripts.fa
 fi
 
 ### Run Kallisto to quantify each RNA-seq experiment ###
