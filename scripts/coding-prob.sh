@@ -5,7 +5,7 @@ workdir=$1
 cd $workdir
 
 ### CPAT analysis (coding probability assessment tool) ###
-mkdir cpat &> /dev/nul
+mkdir cpat >&2 $workdir/err.log
 cd cpat
 ## Get Dmel CPAT files
 # logitModel
@@ -26,7 +26,7 @@ fi
 ## Run CPAT - Minimum ORF size = 25; Top ORFs to retain =1 
 echo ----- RUNNING CODING PROBABILITY -----
 if [ ! -e cpat.ORF_prob.best.tsv ]; then
-   cpat.py --verbose false -x $workdir/cpat/fly_Hexamer.tsv -d $workdir/cpat/Fly_logitModel.RData -g $workdir/assemblies/assembled-transcripts.fa -o $workdir/cpat/cpat --min-orf 25 --top-orf 1 2> cpat.outtxt 1> /dev/null
+   cpat.py --verbose false -x $workdir/cpat/fly_Hexamer.tsv -d $workdir/cpat/Fly_logitModel.RData -g $workdir/assemblies/assembled-transcripts.fa -o $workdir/cpat/cpat --min-orf 25 --top-orf 1 2> cpat.outtxt 1> $workdir
 fi
 echo 'Done'
 echo 'Assembly and coding probability done'

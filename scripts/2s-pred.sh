@@ -5,7 +5,7 @@ temp=$2
 output=$3
 bed=$(readlink -f $4)
 
-mkdir $output &> /dev/null
+mkdir $output >&2 $workdir/err.log
 
 if [ -z $temp ]; then
     temp=37
