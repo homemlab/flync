@@ -30,9 +30,9 @@ do
         sd=$(bc -l <<< 'scale=2; '$readlen'*0.1*2')
         sd=${sd%.*}
         if [ $lay == 'SINGLE' ]; then
-            kallisto quant -b 25 -t $threads -o $workdir/kallisto/$i -i $workdir/kallisto/all-new-transcripts.fa.idx -o $i --single -l $readlen -s $sd $workdir/data/$i/$i'.fastq.gz'
+            kallisto quant --genomebam -g $workdir/results/new-lincRNAs.gtf -b 25 -t $threads -o $workdir/kallisto/$i -i $workdir/kallisto/new-transcripts.fa.idx -o $i --single -l $readlen -s $sd $workdir/data/$i/$i'.fastq.gz'
         else
-            kallisto quant -b 50 -t $threads -o $workdir/kallisto/$i -i $workdir/kallisto/all-new-transcripts.fa.idx -o $i -l $readlen -s $sd $workdir/data/$i/$i'_1.fastq.gz' $workdir/data/$i/$i'_2.fastq.gz'
+            kallisto quant --genomebam -g $workdir/results/new-lincRNAs.gtf -b 50 -t $threads -o $workdir/kallisto/$i -i $workdir/kallisto/new-transcripts.fa.idx -o $i -l $readlen -s $sd $workdir/data/$i/$i'_1.fastq.gz' $workdir/data/$i/$i'_2.fastq.gz'
         fi
     fi
 done < $sra
