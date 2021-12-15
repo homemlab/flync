@@ -12,8 +12,8 @@ cd results_dea
 echo sample,condition,path > $workdir/results_dea/metadata.csv
 while read i
 do
-    srr=$(cat $metadata | grep $i | cut -f1 -d,)
-    srrcond=$(cat $metadata | grep $i | cut -f2 -d,)
+    srr=$(grep $i $metadata | cut -f1 -d,)
+    srrcond=$(grep $i $metadata | cut -f2 -d,)
     
     if [ $( echo $srr | wc -l ) == 1 ]; then
         echo $srr','$srrcond','$workdir/kallisto/$srr >> $workdir/results_dea/metadata.csv

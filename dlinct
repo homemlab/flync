@@ -41,6 +41,8 @@ Discovery of Long Intergenic Non-Coding Transcripts:
 
     -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 50).
 
+    -c  <file>  (REQUIRED with -s kall) Metafile in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.
+
     -h          Show this help message and exit."
 
 options='d:l:s:g:a:t:m:c:h'
@@ -84,6 +86,9 @@ elif ! [[ $threads =~ $int ]]; then
   echo "$usage" >&2; exit 1
 elif ! [[ $mapcutoff =~ $int ]]; then
   echo "-m must be an INTEGER defining the minimum percentage of aligned reads for a run to be considered for transcriptome assembly"
+  echo "$usage" >&2; exit 1
+elif ! [[ -f $metadata ]]; then
+  echo "-c must be a .csv file in the format: SRA_sample,condition"
   echo "$usage" >&2; exit 1
 fi
 
@@ -167,8 +172,6 @@ elif [[ $mode = "kall" ]]; then
     bash $appdir/scripts/pre-process-sleuth.sh $workdir $sra2 $metadata
     metadata2=$workdir/results_dea/metadata.csv
     wait
-    echo $workdir
-    echo $metadata2
     Rscript $appdir/scripts/sleuth.r $workdir $metadata2
   fi
 elif [[ -z $mode ]]; then
