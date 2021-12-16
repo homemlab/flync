@@ -11,7 +11,7 @@ else
     offset=$4
 fi
 
-mkdir $output &> /dev/null
+mkdir -p $output 
 
 while read i
 do

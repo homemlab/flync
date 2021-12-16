@@ -2,7 +2,7 @@
 
 appdir=$1
 cd $appdir
-mkdir genome &> /dev/null
+mkdir -p genome 
 cd genome
 
 ### Download latest Drosophila melanogaster genome and annotation file ###

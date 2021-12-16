@@ -1,11 +1,10 @@
 #!/bin/bash
-version=1.6.0
-
-echo -e '\n'Built with Ensembl BDGP6.32 release '('D. melanogaster')'
+version=0.5
 
 set -e
 echo -e '\n'SOFTWARE VERSION $version'\n'
 echo -e "Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>\n"
+echo -e '\n'Built with Ensembl BDGP6.32 release '('D. melanogaster')'
 
 
 ARGS=$(getopt -a --options d:l:s:g:a:t:m:c:h --long "dir:,list:,split:,genome:,annot:,threads:,mapqual:,csvfile:,help" -- "$@")
@@ -39,7 +38,7 @@ Discovery of Long Intergenic Non-Coding Transcripts:
 
     -t  <int>   (OPTIONAL) Number of threads to use during discovery (default is 2).
 
-    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 50).
+    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 50). Usefull for scRNA-seq data where alignment quality is worse than bulk RNA-seq experiments.
 
     -c  <file>  (REQUIRED with -s kall) Metafile in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.
 
@@ -69,7 +68,7 @@ if [ ! "$workdir" ] || [ ! "$sra" ]; then
 fi
 
 if ! [[ -d "$workdir" ]]; then
-  mkdir $workdir
+  mkdir -p $workdir
 fi
 
 # Test if variables are what they are suposed to be #

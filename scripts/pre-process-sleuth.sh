@@ -5,7 +5,7 @@ sra=$2
 metadata=$3
 
 cd $workdir
-mkdir results_dea &> /dev/null
+mkdir -p results_dea 
 cd results_dea
 
 ### Create a .csv file for sleuth analysis ###

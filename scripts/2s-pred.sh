@@ -5,7 +5,7 @@ temp=$2
 output=$3
 bed=$(readlink -f $4)
 
-mkdir $output &> /dev/null
+mkdir -p $output 
 
 if [ -z $temp ]; then
     temp=37

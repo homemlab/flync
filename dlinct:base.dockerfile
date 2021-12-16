@@ -2,32 +2,43 @@ FROM ubuntu:20.04
 
 SHELL ["/bin/bash", "-c"]
 
+LABEL version=2.2.1
+
+LABEL description="This is a docker image with the base software required to run the codename:dlinct pipeline and tests for machine learning resutls"
+
+LABEL author="Ricardo F. dos Santos"
+
+LABEL email="ricardo.santos@nms.unl.pt"
+
 # Install apt-managed software (version blinded - assuming future versions won't break APIs upon rebuild)
 RUN export DEBIAN_FRONTEND=noninteractive \
 	&& apt update \
 	&& apt install --assume-yes \
-    git \
-    hisat2 \
-    samtools \
-    bedtools \
-    bedops \
-    fastqc \
-    stringtie \
-    cufflinks \
-    wget \
     bc \
+    bedops \
+    bedtools \
+    bioperl \
+    coreutils \
+    cpanminus \
+    cufflinks \
     curl \
     default-jre \
-    unzip \
+    fastqc \
+    git \
+    hisat2 \
+    jupyter \
+    jupyter-notebook \
+    kallisto \
     locales \
+    ncbi-entrez-direct
+    pip \
     r-base \
     r-base-dev \
-    bioperl \
-    cpanminus \
     r-cran-randomforest \
-    kallisto \
-    pip \
-    ncbi-entrez-direct
+    samtools \
+    stringtie \
+    unzip \
+    wget \
 
 # Fixing perl locale setting error
 RUN echo 'LANGUAGE=en_US.UTF-8' >> /etc/default/locale \
@@ -45,12 +56,12 @@ RUN pip3 install \
     matplotlib==3.4.3 \
     matplotlib-inline==0.1.3 \
     numpy==1.19.5 \
-    pandas==1.3.2 \
+    pandas==1.1.5 \
+    pickle-mixin==1.0.2 \
     scikit-learn==0.24.2 \
     scikit-plot==0.3.7 \
-    scipy==1.7.1 \
     seaborn==0.11.2 \
-    shap==0.39.0
+    shap==0.40.0
 
 # Install R software
 RUN R -e "install.packages('ROCR',dependencies=TRUE)" \
@@ -96,5 +107,9 @@ ENV PATH="/usr/bin/sratoolkit.2.11.3-ubuntu64/bin:/usr/bin/fasta_ushuffle:${FEEL
 
 # Fix interactive config of SRAtoolkit (https://github.com/ncbi/sra-tools/issues/409)
 RUN echo $("Aexyo" | vdb-config -i)
+
+EXPOSE 8080/tcp
+
+EXPOSE 8080/udp
 
 CMD ["/bin/bash"]

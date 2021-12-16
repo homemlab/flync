@@ -5,22 +5,22 @@ workdir=$1
 cd $workdir
 
 ### CPAT analysis (coding probability assessment tool) ###
-mkdir cpat 
+mkdir -p cpat 
 cd cpat
 ## Get Dmel CPAT files
 # logitModel
 if [ ! -e Fly_logitModel.RData ]; then
-   wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/Fly_logitModel.RData/download -O Fly_logitModel.RData
+   wget --no-check-certificate -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/Fly_logitModel.RData/download -O Fly_logitModel.RData
 fi
 
 # hexamer.tsv
 if [ ! -e fly_Hexamer.tsv ]; then
-   wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_Hexamer.tsv/download -O fly_Hexamer.tsv
+   wget --no-check-certificate -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_Hexamer.tsv/download -O fly_Hexamer.tsv
 fi
 
 # fly_cutoff - probability cpat values below this cutoff are considered non-coding
 if [ ! -e fly_cutoff.txt ]; then
-   wget -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_cutoff.txt/download -O fly_cutoff.txt
+   wget --no-check-certificate -q https://sourceforge.net/projects/rna-cpat/files/v1.2.2/prebuilt_model/fly_cutoff.txt/download -O fly_cutoff.txt
 fi
 
 ## Run CPAT - Minimum ORF size = 25; Top ORFs to retain =1 

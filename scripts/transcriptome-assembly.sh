@@ -7,7 +7,7 @@ appdir=$3
 cd $workdir
 
 ### Assemble transcriptome from mapped reads for each sample ###
-mkdir assemblies &> /dev/null
+mkdir -p assemblies 
 while read i
 do
    if [ ! -e $workdir/assemblies/$i'.rna.gtf' ]; then
@@ -30,7 +30,7 @@ echo 'Done'
 cd ..
 
 echo ----- COMPARING ASSEMBLY TO REFERENCE -----
-mkdir cuffcompare &> /dev/null
+mkdir -p cuffcompare 
 ### Compare the merged assembly to the reference .gtf ###
 if [ ! -e $workdir/cuffcompare/cuffcomp.gtf ]; then
    cuffcompare -R -r $appdir/genome/genome.gtf $workdir/assemblies/merged.gtf -o $workdir/cuffcompare/cuffcomp.gtf 2> $workdir/cuffcompare/cuffcomp.out.txt 1> /dev/null

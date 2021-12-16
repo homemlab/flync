@@ -2,7 +2,7 @@
 workdir=$1
 sra=$2
 cd $workdir
-mkdir results &> /dev/null
+mkdir -p results 
 
 echo ----- EXTRACTING RUN INFOS -----
 if [ ! -e $workdir/results/runinfo.csv ]; then
