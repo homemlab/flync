@@ -26,8 +26,6 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     fastqc \
     git \
     hisat2 \
-    jupyter \
-    jupyter-notebook \
     kallisto \
     locales \
     ncbi-entrez-direct
@@ -52,11 +50,13 @@ RUN echo 'LANGUAGE=en_US.UTF-8' >> /etc/default/locale \
 # Install PIP-managed software
 RUN pip3 install \
     CPAT==3.0.4 \
-    jupyter==1.0.0 \
+    jupyter \
     matplotlib==3.4.3 \
     matplotlib-inline==0.1.3 \
     numpy==1.19.5 \
+    notebook \
     pandas==1.1.5 \
+    pathlib==1.0.1 \
     pickle-mixin==1.0.2 \
     scikit-learn==0.24.2 \
     scikit-plot==0.3.7 \
