@@ -1,0 +1,14 @@
+name: infoMod
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - bedops
+  - coreutils
+  - entrez-direct
+  - gffread
+  - gzip
+  - wget
+variables:
+  CONDA_OVERRIDE_GLIBC: 2.31

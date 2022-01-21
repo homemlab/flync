@@ -8,7 +8,7 @@ bed=$(readlink -f $4)
 mkdir -p $output 
 
 if [ -z $temp ]; then
-    temp=37
+    temp=25
 fi
 
 cd $output

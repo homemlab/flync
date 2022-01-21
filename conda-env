@@ -2,4 +2,8 @@
 echo "Preparing"
 unset CONDA_OVERRIDE_GLIBC
 echo "Installing environment..."
-conda env create -f $PWD/environment.yml
+ls $PWD/*.yml* > envs.txt
+while read i; do
+    conda env create -f $i
+done < envs.txt
+rm envs.txt

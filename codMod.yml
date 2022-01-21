@@ -1,0 +1,13 @@
+name: codMod
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - coreutils
+  - wget
+  - pip
+  - pip:
+    - CPAT
+variables:
+  CONDA_OVERRIDE_GLIBC: 2.31

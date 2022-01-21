@@ -1,0 +1,16 @@
+name: mapMod
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - coreutils
+  - wget
+  - gzip
+  - hisat2
+  - bc
+  - sra-tools
+  - samtools
+  - parallel
+variables:
+  CONDA_OVERRIDE_GLIBC: 2.31

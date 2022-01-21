@@ -5,6 +5,7 @@ channels:
   - defaults
 dependencies:
   - bc=1.07.1
+  - bedops=2.4.39
   - coreutils=8.31
   - cufflinks=2.2.1
   - curl=7.80.0
@@ -27,6 +28,7 @@ dependencies:
   - ucsc-bigwigaverageoverbed=377
   - ucsc-bigwigsummary=377
   - unzip=6.0
+  - pip
   - pip:
     - CPAT==3.0.4
     - matplotlib==3.3.4

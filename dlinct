@@ -7,7 +7,7 @@ echo -e "Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>\n"
 echo -e '\n'Built with Ensembl BDGP6.32 release '('D. melanogaster')'
 
 
-ARGS=$(getopt -a --options d:l:s:g:a:t:m:c:h --long "dir:,list:,split:,genome:,annot:,threads:,mapqual:,csvfile:,help" -- "$@")
+ARGS=$(getopt -a --options d:l:s:g:a:t:m:c:h -l "dir:,list:,split:,,genome:,,annot:,,threads:,,mapqual:,,csvfile:,,help" -- "$@")
 
 # Constant or default variables ""
 appdir=${PWD}
@@ -57,7 +57,7 @@ while getopts $options option; do
     c) metadata=$(readlink -f $OPTARG);;
     h) echo "$usage"; exit;;
     :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
-   \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
+    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
   esac
 done
 

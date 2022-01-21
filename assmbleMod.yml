@@ -1,0 +1,14 @@
+name: assembleMod
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - coreutils
+  - wget
+  - bc
+  - cufflinks
+  - stringtie
+  - parallel
+variables:
+  CONDA_OVERRIDE_GLIBC: 2.31

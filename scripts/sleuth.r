@@ -13,7 +13,8 @@ library("sleuth")
 so <- sleuth_prep(md,
              full_model = ~condition,
              read_bootstrap_tpm=TRUE,
-             extra_bootstrap_summary = TRUE)
+             extra_bootstrap_summary = TRUE,
+             transformation_function = function(x) log2(x + 0.5))
 
 so <- sleuth_fit(so, ~condition, 'full')
 so <- sleuth_fit(so, ~1, 'reduced')
