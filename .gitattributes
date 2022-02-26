@@ -1,1 +1,3 @@
-*.2s linguist-documentation
+lncrna/*.2s linguist-documentation
+not_lncrna/*.2s linguist-documentation
+
