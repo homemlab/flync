@@ -7,13 +7,12 @@ echo -e "Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>\n"
 echo -e '\n'Built with Ensembl BDGP6.32 release '('D. melanogaster')'
 
 
-ARGS=$(getopt -a --options d:l:f:s:g:a:t:m:c:h -l "dir:,list:,fq:,split:,,genome:,,annot:,,threads:,,mapqual:,,csvfile:,,help" -- "$@")
+ARGS=$(getopt -a --options d:l:s:g:a:t:m:c:h -l "dir:,list:,split:,,genome:,,annot:,,threads:,,mapqual:,,csvfile:,,help" -- "$@")
 
 # Constant or default variables ""
 appdir=${PWD}
 threads=2
 mapcutoff=50
-gz=false
 progfile=$appdir/scripts/vlookup.awk
 
 usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT ARGS -sgatm] | [-h]
@@ -22,8 +21,6 @@ Discovery of Long Intergenic Non-Coding Transcripts:
     -d  <path>  Directory to which the results will be outputed to.
 
     -l  <file>  File with list of SRA accession numbers one per line.
-
-    -f  <dir>   Directory containing the fastq reads to be analyzed.
 
     -s  <str>   (OPTIONAL) Split mode: Run specific parts of the analysis pipeline. Available options are:
                   [map] : Download and map reads against the provided accessions.
@@ -47,11 +44,10 @@ Discovery of Long Intergenic Non-Coding Transcripts:
 
     -h          Show this help message and exit."
 
-options='d:f:l:s:g:a:t:m:c:h'
+options='d:l:s:g:a:t:m:c:h'
 while getopts $options option; do
   case "$option" in
     d) workdir=$(readlink -f $OPTARG'/');;
-    f) fq=$(readlink -f $OPTARG'/');;
     l) sra=$(readlink -f $OPTARG);;
     s) mode=$OPTARG;;
     g) genome=$(readlink -f $OPTARG);;
@@ -66,39 +62,14 @@ while getopts $options option; do
 done
 
 # mandatory arguments
-if [ -z ${workdir+x} ]; then 
-  echo "$usage" && echo "You need to provide an output directory, if it doesn't exist it will be created" >&2; exit 1 
-else
-  if [[ -z ${sra+x} ]]; then
-    if [[ -z ${fq+x} ]]; then
-      echo "$usage" && echo "You need to provide at least one of the two -l or -f flags - an SRA accession list or a directory containing the fastq files, respectively" >&2; exit 1
-    else
-      if [[ $(ls "$fq" | grep .fq.gz) ]]; then 
-        ls -A "$fq"/*.fq.gz > $apdir/files.txt
-        gz=ture
-      elif [[ $(ls "$fq" | grep .fq) ]]; then 
-        ls -A "$fq"/*.fq > $apdir/files.txt
-      elif [[ $(ls "$fq" | grep .fastq.gz) ]]; then 
-        ls -A "$fq"/*.fastq.gz > $apdir/files.txt
-        gz=ture
-      elif [[ $(ls "$fq" | grep .fastq) ]]; then 
-        ls -A "$fq"/*.fastq > $apdir/files.txt
-      fi
-    jobs=$(wc -l $appdir/files.txt | cut -f1 -d' ')
-    fi
-  else
-    jobs=$(wc -l $sra | cut -f1 -d' ')
-  fi
+if [ ! "$workdir" ] || [ ! "$sra" ]; then
+  echo "Mandatory arguments -d and -l must be provided"
+  echo "$usage" >&2; exit 1
 fi
 
 if ! [[ -d "$workdir" ]]; then
   mkdir -p $workdir
 fi
-
-downstream_threads=$(expr $threads / $jobs)
-downstream_threads=${downstream_threads%.*}
-
-echo 'Number of threads per task: ' $downstream_threads
 
 # Test if variables are what they are suposed to be #
 int='^[0-9]+$'
@@ -108,9 +79,6 @@ if ! [[ -d $workdir ]]; then
   echo "$usage" >&2; exit 1
 elif ! [[ -f $sra ]]; then
   echo "-l must be a FILE, usually a .txt file, with SRA accession numbers (SRR######, one per line, last line required to be empty)"
-  echo "$usage" >&2; exit 1
-elif ! [[ -d $fq ]]; then
-  echo "-f must be a DIRECTORY containing with the fastq reads to input"
   echo "$usage" >&2; exit 1
 elif ! [[ $threads =~ $int ]]; then
   echo "-t must be an INTEGER with the number of threads to be created during the process (recomended max = number of cores)"
@@ -124,8 +92,6 @@ elif ! [[ -f $metadata ]]; then
 fi
 
 # Checking if user supplied genome/annotation files
-mkdir -p $appdir/genome
-
 if [[ -z $genome ]]; then
   if ! [[ -z $annot ]]; then
     echo "To avoid compatibility errors .fa and .gtf files should com from same assembly. Using pre-built genome assembly"
@@ -158,11 +124,6 @@ else
     fi
   fi
 fi
-
-
-
-### Testing which mode is active and then runing the appropriate program
-
 
 if [[ $mode = "map" ]]; then
   bash $appdir/scripts/build-index.sh $appdir $threads
@@ -231,7 +192,7 @@ elif [[ -z $mode ]]; then
   bash $appdir/scripts/post-process-transcript-assembly.sh $workdir $progfile
 else
   echo "Available options for -s/--split are: [map], [map-stats], [assembly], [clean] or [kall]"
-  echo "Run dlinct -h to get help message. To run whole analysis remove -s flag" >&2; exit 1
+  echo "Run dlinct -h to get help message. To run whole analysis remove -s/--split flag" >&2; exit 1
 fi
 
 cp $workdir/assemblies/merged.gtf $workdir/results/merged-assembly.gtf

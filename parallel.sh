@@ -9,20 +9,20 @@ appdir=$4
 #genome=$(readlink -f $6)
 #annot=$(readlink -f $7)
 
-## HARDCODED VARS ##
-#if [[ -z $SLURM_NTASKS ]]; then
+# # HARDCODED VARS ##
+# if [[ -z $SLURM_NTASKS ]]; then
 #  jobs=$(expr $(lscpu | grep 'CPU(s):' | awk {'print($2)'}) / 4)
 #  jobs=${jobs%.*}
-#else
-#  if [[ $threads="" ]]; then
+# else
+#  if [[ -z $threads ]]; then
 #    jobs=$(expr $SLURM_NTASKS / 4)
 #    jobs=${jobs%.*}
 #  else
 #    jobs=$(expr $threads / 4)
 #    jobs=${jobs%.*}
 #  fi
-#fi
-#echo 'Number of tasks for this job: ' $jobs
+# fi
+echo 'Number of tasks for this job: ' $jobs
 
 jobs=$(wc -l $sra | cut -f1 -d' ')
 
@@ -73,7 +73,7 @@ function silence_parallel () {
     ## SILENCE PARALLEL FIRST RUN ##
     parallel --citation &> $appdir/cmd.out
     echo will cite &> $appdir/cmd.out
-    rm cmd.out
+    rm $appdir/cmd.out
 }
 
 mkdir -p $workdir
@@ -90,9 +90,7 @@ $appdir/scripts/get-sra-info.sh $workdir $sra
 conda activate mapMod
 
 ## SILENCE PARALLEL FIRST RUN ##
-parallel --citation &> cmd.out
-echo will cite &> cmd.out
-rm cmd.out
+silence_parallel
 
 $appdir/scripts/build-index.sh $appdir $threads
 parallel -k --lb -j $jobs -a $sra $appdir/tux2map.sh $workdir {} $downstream_threads $appdir
