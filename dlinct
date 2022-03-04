@@ -16,7 +16,7 @@ mapcutoff=50
 gz=false
 progfile=$appdir/scripts/vlookup.awk
 
-usage="$(basename "$0") [-d DIRECTORY] [-l LIST] [OPT ARGS -sgatm] | [-h]
+usage="$(basename "$0") [-d DIRECTORY] [-l FILE] OR [-f DIRECTORY] ... [OPT ARGS -sgatmc] | [-h]
 
 Discovery of Long Intergenic Non-Coding Transcripts:
     -d  <path>  Directory to which the results will be outputed to.
@@ -65,10 +65,32 @@ while getopts $options option; do
   esac
 done
 
+## Silence citation output of GNU Parallel ##
+function silence_parallel () {
+    ## SILENCE PARALLEL FIRST RUN ##
+    parallel --citation &> $appdir/cmd.out
+    echo will cite &> $appdir/cmd.out
+    rm $appdir/cmd.out
+}
+
+### Prepare conda to switch between environments
+conda_path=$(conda info | grep -i 'base environment' | awk '{print$(4)}')
+conda_sh=$conda_path'/etc/profile.d/conda.sh'
+source $conda_sh
+conda init $(echo $SHELL | awk -F'[/]' '{print$(NF)}') &> $appdir/cmd.out
+
+# Initialize first environment
+conda activate infoMod
+silence_parallel
+
 # mandatory arguments
 if [ -z ${workdir+x} ]; then 
   echo "$usage" && echo "You need to provide an output directory, if it doesn't exist it will be created" >&2; exit 1 
 else
+  if ! [[ -d "$workdir" ]]; then
+    mkdir -p $workdir
+  fi
+
   if [[ -z ${sra+x} ]]; then
     if [[ -z ${fq+x} ]]; then
       echo "$usage" && echo "You need to provide at least one of the two -l or -f flags - an SRA accession list or a directory containing the fastq files, respectively" >&2; exit 1
@@ -87,12 +109,9 @@ else
     jobs=$(wc -l $appdir/files.txt | cut -f1 -d' ')
     fi
   else
+    $appdir/scripts/get-sra-info.sh $workdir $sra
     jobs=$(wc -l $sra | cut -f1 -d' ')
   fi
-fi
-
-if ! [[ -d "$workdir" ]]; then
-  mkdir -p $workdir
 fi
 
 downstream_threads=$(expr $threads / $jobs)
@@ -159,7 +178,11 @@ else
   fi
 fi
 
-
+# Initialize alignment environment
+conda activate mapMod
+silence_parallel
+### Build genome index
+$appdir/scripts/build-index.sh $appdir $threads
 
 ### Testing which mode is active and then runing the appropriate program
 
