@@ -4,6 +4,7 @@ channels:
   - bioconda
   - defaults
 dependencies:
+  - niet
   - bedops
   - coreutils
   - entrez-direct

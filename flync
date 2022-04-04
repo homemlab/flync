@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+
+# IMPORTS
+import subprocess
+from pathlib import Path
+import argparse
+from argparse import RawTextHelpFormatter
+from tabulate import tabulate
+import uuid
+import sys
+
+# HARD CODED VARS
+__author__ = 'Ricardo F. dos Santos'
+__mail__ = '<ricardo.santos@nms.unl.pt>'
+__version__ = '1.1.1'
+appdir = Path(__file__).resolve().parent
+genome_release = 'Ensembl BDGP6.32 release'
+
+# COLORS
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    NC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    RED='\033[0;31m'
+    RED2='\033[1;31m'
+    YELLOW='\033[1;33m'
+    CYAN='\033[0;36m'
+    PURPLE2='\033[1;35m'
+
+parser = argparse.ArgumentParser(prog='flync', description=f'{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification options:{bcolors.NC}', formatter_class=RawTextHelpFormatter)
+
+parser.add_argument('--version', action='version',
+                    version='%(prog)s {version}'.format(version=__version__))
+
+subparsers = parser.add_subparsers(title='subcommands',
+                                   description=f'{bcolors.YELLOW}Please choose one of the valid subcommands.{bcolors.NC} \nRun {bcolors.CYAN}flync <subcommand> --help{bcolors.NC} to see available options.',
+                                   help='description', 
+                                   required=True,
+                                   dest='subcommand')
+
+### CONFIG PIPELINE ARGUMENTS ###
+run = subparsers.add_parser('run', help='Run full pipeline using a <config.yaml> file (default = ./config.yaml).', formatter_class=RawTextHelpFormatter)
+
+run.add_argument(
+    '--config',
+    '-c',
+    metavar='<FILE>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'config.yaml',
+    help=f'{bcolors.YELLOW}{bcolors.UNDERLINE}RECOMENDED. Dispenses all other options.{bcolors.NC} Configuration file (YAML format) with arguments for running the pipeline. Default = {bcolors.BOLD}{bcolors.CYAN}' + appdir.as_posix() + '/config.yaml'
+)
+
+
+### SRA PIPELINE ARGUMENTS ###
+sra = subparsers.add_parser('sra', help=f'Run full pipeline using a <list.txt> of SRA accession numbers (usually SRR########). \nThese fastq files will be stored locally while pipeline is running. \nBe sure to run {bcolors.BOLD}{bcolors.CYAN}flync -s clean{bcolors.NC} to remove them afterwards.', formatter_class=RawTextHelpFormatter)
+
+sra.add_argument(
+    '--list',
+    '-l',
+    metavar='<DIR>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'results' / uuid.uuid4().hex,
+    help=f'{bcolors.RED2}MANDATORY.{bcolors.NC} File with list of SRA accession numbers one per line. (usually SRR########)',
+    required=True
+)
+
+sra.add_argument(
+    '--output',
+    '-o',
+    metavar='<DIR>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'results' / uuid.uuid4().hex,
+    help=f'{bcolors.RED2}ADVISABLE.{bcolors.NC} Directory to which the results will be written.',
+    required=True
+)
+
+sra.add_argument(
+    '--split',
+    '-s',
+    metavar='<STR>',
+    action='store',
+    type=str,
+    default='full',
+    help=f'''Split mode: Run specific parts of the analysis pipeline. Available options are:
+    [full] : Preform the main pipeline: Read alignment, Transcriptome assembly, Coding probability & Transcript scoring and classification.
+    [map] : Only download (if -l is provided) and map reads to the reference genome.
+    [map-stats] : Perform the analysis of the mapping statistics and prepares files for assembly step.
+    [assembly] : Perform assembly step and coding probability assessment. Also outputs final results.
+    [dge] : Perform the whole pipeline plus a pseudoalignment with Differential Gene Expression analysis considering the newly discovered transcripts.
+    [clean] : Intended to remove unnecessary files after complete run. Will delete data/ and assemblies/ folder.'''
+)
+
+sra.add_argument(
+    '--metadata',
+    '-m',
+    metavar='<FILE>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'test' / 'metadata.csv',
+    help=f'{bcolors.RED2}(MANDATORY if -s dge).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
+)
+
+sra.add_argument(
+    '--genome',
+    '-g',
+    metavar='<FILE>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'genome' / 'genome.fa',
+    help='File in .fa format of the genome sequence to be used. If not provided, will download and use ' + genome_release
+)
+
+sra.add_argument(
+    '--annotation',
+    '-a',
+    metavar='<FILE>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'genome' / 'genome.gtf',
+    help='File in .gtf format of the genome annotation to be used. If not provided, will download and use ' + genome_release
+)
+
+sra.add_argument(
+    '--threads',
+    '-t',
+    metavar='<INT>',
+    action='store',
+    type=int,
+    default=2,
+    help='Number of threads to use during execution (default = 2).'
+)
+
+sra.add_argument(
+    '--quality',
+    '-q',
+    metavar='<INT>',
+    action='store',
+    type=int,
+    default=50,
+    help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
+)
+
+### FASTQ PIPELINE ARGUMENTS ###
+fastq = subparsers.add_parser('fastq', help='Run full pipeline by providing a local <dir> containing the <fastq.gz> files to be used as input.', formatter_class=RawTextHelpFormatter)
+
+fastq.add_argument(
+    '--fastq',
+    '-f',
+    metavar='<DIR>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'results' / uuid.uuid4().hex,
+    help=f'{bcolors.RED2}MANDATORY.{bcolors.NC} Directory containing the fastq reads to be analyzed.',
+    required=True
+)
+
+fastq.add_argument(
+    '--output',
+    '-o',
+    metavar='<DIR>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'results' / uuid.uuid4().hex,
+    help=f'{bcolors.RED2}ADVISABLE.{bcolors.NC} Directory to which the results will be written.',
+    required=True
+)
+
+
+fastq.add_argument(
+    '--paired',
+    '-p',
+    metavar='<BOOL>',
+    action='store',
+    type=bool,
+    default=False,
+    help='Set to <true> (1) or <false> (0) if provided reads are paired-end or not. If false or unset will assume unpaired reads.'
+)
+
+fastq.add_argument(
+    '--split',
+    '-s',
+    metavar='<STR>',
+    action='store',
+    type=str,
+    default='full',
+    help=f'''Split mode: Run specific parts of the analysis pipeline. Available options are:
+    [full] : Preform the main pipeline: Read alignment, Transcriptome assembly, Coding probability & Transcript scoring and classification.
+    [map] : Only download (if -l is provided) and map reads to the reference genome.
+    [map-stats] : Perform the analysis of the mapping statistics and prepares files for assembly step.
+    [assembly] : Perform assembly step and coding probability assessment. Also outputs final results.
+    [dge] : Perform the whole pipeline plus a pseudoalignment with Differential Gene Expression analysis considering the newly discovered transcripts.
+    [clean] : Intended to remove unnecessary files after complete run. Will delete data/ and assemblies/ folder.'''
+)
+
+fastq.add_argument(
+    '--metadata',
+    '-m',
+    metavar='<FILE>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'test' / 'metadata.csv',
+    help=f'{bcolors.RED2}(MANDATORY if -s dge).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
+)
+
+fastq.add_argument(
+    '--genome',
+    '-g',
+    metavar='<FILE>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'genome' / 'genome.fa',
+    help='File in .fa format of the genome sequence to be used. If not provided, will download and use ' + genome_release
+)
+
+fastq.add_argument(
+    '--annotation',
+    '-a',
+    metavar='<FILE>',
+    action='store',
+    type=lambda p: Path(p).resolve(),
+    default=appdir / 'genome' / 'genome.gtf',
+    help='File in .gtf format of the genome annotation to be used. If not provided, will download and use ' + genome_release
+)
+
+fastq.add_argument(
+    '--threads',
+    '-t',
+    metavar='<INT>',
+    action='store',
+    type=int,
+    default=2,
+    help='Number of threads to use during execution (default = 2).'
+)
+
+fastq.add_argument(
+    '--quality',
+    '-q',
+    metavar='<INT>',
+    action='store',
+    type=int,
+    default=50,
+    help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
+)
+
+args = parser.parse_args()
+print(args)
+if args.subcommand == 'sra':
+    process = subprocess.Popen([appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()],
+        bufsize = 1,
+        stdout = subprocess.PIPE, 
+        stderr = subprocess.STDOUT,
+        encoding='utf-8',
+        errors = 'replace'
+        )
+ 
+    while True:
+        realtime_output = process.stdout.readline()
+        if realtime_output == '' and process.poll() is not None:
+            break
+        if realtime_output:
+            print(realtime_output.strip(), flush=False)
+            sys.stdout.flush()
+    

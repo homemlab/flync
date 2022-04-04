@@ -8,7 +8,7 @@ echo cpat cutoff is: $cutoff '('D. melanogaster - see CPAT docs')'
 
 ### Save .gtf files for each type of new transcript discovered
 grep '; class_code "u";' $workdir/cuffcompare/cuffcomp.gtf.combined.gtf > results/candidate-lincRNA.gtf
-grep '; class_code "i";' $workdir/cuffcompare/cuffcomp.gtf.combined.gtf > results/candidate-circRNA.gtf
+grep '; class_code "i";' $workdir/cuffcompare/cuffcomp.gtf.combined.gtf > results/candidate-intronicRNA
 grep '; class_code "x";' $workdir/cuffcompare/cuffcomp.gtf.combined.gtf > results/candidate-antisenseRNA.gtf
 grep '; class_code "j";' $workdir/cuffcompare/cuffcomp.gtf.combined.gtf > results/candidate-isoforms.gtf
 
@@ -27,17 +27,17 @@ rm -f cpat/cpat.uORF.final.txt
 mkdir -p $workdir/results/{coding,non-coding}
 
 grep -f $workdir/cpat/cpat.non-coding.sorted.txt $workdir/results/candidate-lincRNA.gtf > $workdir/results/non-coding/new-lincRNAs.gtf
-grep -f $workdir/cpat/cpat.non-coding.sorted.txt $workdir/results/candidate-circRNA.gtf > $workdir/results/non-coding/new-circRNAs.gtf
+grep -f $workdir/cpat/cpat.non-coding.sorted.txt $workdir/results/candidate-intronicRNA > $workdir/results/non-coding/new-intronicRNAs.gtf
 grep -f $workdir/cpat/cpat.non-coding.sorted.txt $workdir/results/candidate-antisenseRNA.gtf > $workdir/results/non-coding/new-antisenseRNAs.gtf
 grep -f $workdir/cpat/cpat.coding.sorted.txt $workdir/results/candidate-isoforms.gtf > $workdir/results/coding/new-isoforms.gtf
 grep -f $workdir/cpat/cpat.coding.microORFs.sorted.txt $workdir/results/candidate-lincRNA.gtf > $workdir/results/coding/new-lncRNA-microORFs.gtf
-grep -f $workdir/cpat/cpat.coding.microORFs.sorted.txt $workdir/results/candidate-circRNA.gtf >> $workdir/results/coding/new-lncRNA-microORFs.gtf
+grep -f $workdir/cpat/cpat.coding.microORFs.sorted.txt $workdir/results/candidate-intronicRNA >> $workdir/results/coding/new-lncRNA-microORFs.gtf
 grep -f $workdir/cpat/cpat.coding.microORFs.sorted.txt $workdir/results/candidate-antisenseRNA.gtf >> $workdir/results/coding/new-lncRNA-microORFs.gtf
 
 rm $workdir/results/candidate*
 
 cd $workdir/results/non-coding/
-cat new-lincRNAs.gtf new-circRNAs.gtf new-antisenseRNAs.gtf | sort -t . -k 2 -g | uniq > $workdir/results/new-non-coding.gtf
+cat new-lincRNAs.gtf new-intronicRNAs.gtf new-antisenseRNAs.gtf | sort -t . -k 2 -g | uniq > $workdir/results/new-non-coding.gtf
 
 cd $workdir/results/coding/
 cat new-isoforms.gtf new-lncRNA-microORFs.gtf | sort -t . -k 2 -g | uniq > $workdir/results/new-coding.gtf

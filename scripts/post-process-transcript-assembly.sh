@@ -12,7 +12,7 @@ echo cpat cutoff is: $cutoff '('D. melanogaster - see CPAT docs')'
 
 ### Save the 'u'-tagged assembled transcripts '('candidate novel lincRNAs')' supported by read coverage
 grep -w "u" $workdir/assemblies/cuffcomp.gtf.merged.gtf.tmap | sort -n -k 10 > results/candidate-assembled-lincRNAs.tsv
-grep -w "i" $workdir/assemblies/cuffcomp.gtf.merged.gtf.tmap | sort -n -k 10 > results/candidate-assembled-circRNAs.tsv
+grep -w "i" $workdir/assemblies/cuffcomp.gtf.merged.gtf.tmap | sort -n -k 10 > results/candidate-assembled-intronicRNAs.tsv
 grep -w "x" $workdir/assemblies/cuffcomp.gtf.merged.gtf.tmap | sort -n -k 10 > results/candidate-assembled-antisenseRNAs.tsv
 grep -w "j" $workdir/assemblies/cuffcomp.gtf.merged.gtf.tmap | sort -n -k 10 > results/candidate-assembled-isoforms.tsv
 
@@ -32,11 +32,11 @@ fi
 
 ### This latter file is a list of non-coding transcripts that can now be used as reference to search new lncRNAs
 awk -f $progfile cpat/cpat.non-coding.sorted.txt results/candidate-assembled-lincRNAs.tsv > results/new-lincRNAs.tsv
-awk -f $progfile cpat/cpat.non-coding.sorted.txt results/candidate-assembled-circRNAs.tsv > results/new-circRNAs.tsv
+awk -f $progfile cpat/cpat.non-coding.sorted.txt results/candidate-assembled-intronicRNAs.tsv > results/new-intronicRNAs.tsv
 awk -f $progfile cpat/cpat.non-coding.sorted.txt results/candidate-assembled-antisenseRNAs.tsv > results/new-antisenseRNAs.tsv
 awk -f $progfile cpat/cpat.coding.sorted.txt results/candidate-assembled-isoforms.tsv > results/new-isoforms.tsv
 awk -f $progfile cpat/cpat.coding.microORFs.sorted.txt results/candidate-assembled-lincRNAs.tsv > results/new-lncRNA-microORFs.tsv
-awk -f $progfile cpat/cpat.coding.microORFs.sorted.txt results/candidate-assembled-circRNAs.tsv >> results/new-lncRNA-microORFs.tsv
+awk -f $progfile cpat/cpat.coding.microORFs.sorted.txt results/candidate-assembled-intronicRNAs.tsv >> results/new-lncRNA-microORFs.tsv
 awk -f $progfile cpat/cpat.coding.microORFs.sorted.txt results/candidate-assembled-antisenseRNAs.tsv >> results/new-lncRNA-microORFs.tsv
 
 

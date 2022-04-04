@@ -9,9 +9,22 @@ appdir=$(readlink -f $4)
 #genome=$(readlink -f $6)
 #annot=$(readlink -f $7)
 
-jobs=$(wc -l $sra | cut -f1 -d' ')
-
+# # HARDCODED VARS ##
+# if [[ -z $SLURM_NTASKS ]]; then
+#  jobs=$(expr $(lscpu | grep 'CPU(s):' | awk {'print($2)'}) / 4)
+#  jobs=${jobs%.*}
+# else
+#  if [[ -z $threads ]]; then
+#    jobs=$(expr $SLURM_NTASKS / 4)
+#    jobs=${jobs%.*}
+#  else
+#    jobs=$(expr $threads / 4)
+#    jobs=${jobs%.*}
+#  fi
+# fi
 echo 'Number of tasks for this job: ' $jobs
+
+jobs=$(wc -l $sra | cut -f1 -d' ')
 
 downstream_threads=$(expr $threads / $jobs)
 downstream_threads=${downstream_threads%.*}
@@ -19,8 +32,6 @@ downstream_threads=${downstream_threads%.*}
 echo 'Number of threads per task: ' $downstream_threads
 
 mkdir -p $appdir/genome
-
-## INITIATE PIPELINE ##
 
 mkdir -p $workdir
 conda_path=$(conda info | grep -i 'base environment' | awk '{print$(4)}')
@@ -36,10 +47,11 @@ parallel --citation &> $appdir/cmd.out
 echo will cite &> $appdir/cmd.out
 rm $appdir/cmd.out
 
-## RUN SCRIPTS FOR GETTING GENOME AND INFO ON SRA RUNS
+
+## INITIATE PIPELINE ##
+
 $appdir/scripts/get-genome.sh $appdir
 $appdir/scripts/get-sra-info.sh $workdir $sra
-$appdir/scripts/build-index.sh $appdir $threads
 
 conda activate mapMod
 
@@ -57,7 +69,6 @@ conda activate assembleMod
 parallel --citation &> $appdir/cmd.out
 echo will cite &> $appdir/cmd.out
 rm $appdir/cmd.out
-
 
 parallel -k --lb -j $jobs -a $sra $appdir/tux2assemble.sh $workdir {} $downstream_threads $appdir
 $appdir/tux2merge.sh $workdir $sra $threads $appdir

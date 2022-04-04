@@ -7,24 +7,39 @@ echo -e "Ricardo F. dos Santos <ricardo.santos@nms.unl.pt>\n"
 echo -e '\n'Built with Ensembl BDGP6.32 release '('D. melanogaster')'
 
 
-ARGS=$(getopt -a --options d:l:f:s:g:a:t:m:c:h -l "dir:,list:,fq:,split:,,genome:,,annot:,,threads:,,mapqual:,,csvfile:,,help" -- "$@")
+#ARGS=$(getopt -o colfpsgatqmh:: -l config::,output::,list::,fastq::,paired::,split::,genome::,annotation::,threads::,quality::,metadata::,help -- "$@")
 
 # Constant or default variables ""
 appdir=${PWD}
+run_name=$(echo $RANDOM | sha1sum | awk '{print$1}')
 threads=2
 mapcutoff=50
 gz=false
 progfile=$appdir/scripts/vlookup.awk
 
-usage="$(basename "$0") [-d DIRECTORY] [-l FILE] OR [-f DIRECTORY] ... [OPT ARGS -sgatmc] | [-h]
+# Colors
+RED='\033[0;31m'
+RED2='\033[1;31m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+PURPLE2='\033[1;35m'
+NC='\033[0m'
 
-Discovery of Long Intergenic Non-Coding Transcripts:
-    -d  <path>  Directory to which the results will be outputed to.
+usage="usage: $(basename "$0") [-d DIRECTORY] [-l FILE] OR [-f DIRECTORY|-p BOOLEAN] ... [OPT ARGS -csgatqm] | [-h]
 
-    -l  <file>  File with list of SRA accession numbers one per line.
+${PURPLE2}Discovery of Long Intergenic Non-Coding Transcripts options:${NC}
+  FLAG  INPUT   DESCRIPTION
+    
+    -c  <file>  ${CYAN}RECOMENDED. Dispenses all other options.${NC} Configuration file (YAML format) with arguments for running the pipeline.
+    
+    -o  <path>  ${RED2}MANDATORY.${NC} Directory to which the results will be outputed to.
 
-    -f  <dir>   Directory containing the fastq reads to be analyzed.
+    -l  <file>  ${RED2}MANDATORY (if no -f).${NC} File with list of SRA accession numbers one per line.
 
+    -f  <dir>   ${RED2}MANDATORY (if no -l).${NC} Directory containing the fastq reads to be analyzed.
+
+    -p  <bool>  Set to \"true\" or \"false\". Boolian if provided reads are paired-end or not. If false or unset will assum single-end reads.
+    
     -s  <str>   (OPTIONAL) Split mode: Run specific parts of the analysis pipeline. Available options are:
                   [map] : Download and map reads against the provided accessions.
                   [map-stats] : Preform the analysis of the mapping statistics and prepares files for assembly step.
@@ -39,19 +54,27 @@ Discovery of Long Intergenic Non-Coding Transcripts:
 
     -a  <file>  (OPTIONAL) File in .gtf format of the genome annotation to be used. If not provided, the more recent will be downloaded from Ensembl.org at the date of version build.
 
-    -t  <int>   (OPTIONAL) Number of threads to use during discovery (default is 2).
+    -t  <int>   (OPTIONAL) Number of threads to use during discovery (default = 2).
 
-    -m  <int>   (OPTIONAL) Minimum percentage of reads aligned to genome during hisat2 mapping (default is 50). Usefull for scRNA-seq data where alignment quality is worse than bulk RNA-seq experiments.
+    -q  <int>   (OPTIONAL) Alignment quality. Minimum percentage of reads aligned to genome during hisat2 mapping (default = 50).
 
-    -c  <file>  (REQUIRED with -s kall) Metafile in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.
+    -m  <file>  (REQUIRED with -s kall) Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.
 
     -h          Show this help message and exit."
 
-options='d:f:l:s:g:a:t:m:c:h'
+
+# # Return help if no arguments are given
+# if [[ $# -eq 0 ]] ; then
+#     echo -e "${YELLOW}!!!NO ARGUMENTS PROVIDED!!!${NC}" >&2; echo -e "\n$usage" >&2; exit 1
+# fi
+
+# Assign varibles from flags
+# eval set -- "$ARGS"
+
+options='d:l:s:g:a:t:m:c:h'
 while getopts $options option; do
   case "$option" in
     d) workdir=$(readlink -f $OPTARG'/');;
-    f) fq=$(readlink -f $OPTARG'/');;
     l) sra=$(readlink -f $OPTARG);;
     s) mode=$OPTARG;;
     g) genome=$(readlink -f $OPTARG);;
@@ -65,13 +88,39 @@ while getopts $options option; do
   esac
 done
 
-## Silence citation output of GNU Parallel ##
-function silence_parallel () {
-    ## SILENCE PARALLEL FIRST RUN ##
-    parallel --citation &> $appdir/cmd.out
-    echo will cite &> $appdir/cmd.out
-    rm $appdir/cmd.out
-}
+options="c:o:l:f:p:s:g:a:t:q:m:h:"
+while getopts "$options" option
+do 	
+  case $option in
+		c)	
+      config=$(readlink -f "$OPTARG");;
+		o)	
+      workdir=$(readlink -f "$OPTARG");;
+		l)	
+      sra=$(readlink -f "$OPTARG");;
+		f)	
+      fq=$(readlink -f "$OPTARG");;
+		p)	
+      paired="$OPTARG";;
+		s)	
+      mode="$OPTARG";;
+		g)	
+      genome=$(readlink -f "$OPTARG");;
+		a)	
+      annot=$(readlink -f "$OPTARG");;
+		t)	
+      threads="$OPTARG";;
+		q)	
+      mapcutoff="$OPTARG";;
+		m)	
+      metadata=$(readlink -f "$OPTARG");;
+    h) echo "$usage"; exit;;
+    :) printf "missing argument for -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
+    \?) printf "illegal option: -%s\n" "$OPTARG" >&2; echo "\n$usage" >&2; exit 1;;
+    esac
+done
+
+echo $workdir
 
 ### Prepare conda to switch between environments
 conda_path=$(conda info | grep -i 'base environment' | awk '{print$(4)}')
@@ -81,7 +130,32 @@ conda init $(echo $SHELL | awk -F'[/]' '{print$(NF)}') &> $appdir/cmd.out
 
 # Initialize first environment
 conda activate infoMod
-silence_parallel
+
+## Silence citation output of GNU Parallel ##
+## SILENCE PARALLEL FIRST RUN ##
+# parallel --citation &> $appdir/cmd.out
+# echo will cite &> $appdir/cmd.out
+# rm $appdir/cmd.out
+
+# Parse arguments from config.yaml if provided
+if ! [ -z ${config+x} ]; then
+  echo -e "${YELLOW}Getting configuration from .yaml file${NC}"
+  run_name=$(niet ".name" "$config")
+  workdir=$(readlink -f $(niet ".output" "$config"))
+  fq_bool=$(niet ".fastq.active" "$config")
+  fq=$(readlink -f $(niet ".fastq.path" "$config"))
+  paired=$(niet ".fastq.paired" "$config")
+  sra=$(readlink -f $(niet ".fastq.sra" "$config"))
+  split_bools=$(niet ".split.active" "$config")
+  mode=$(niet ".split.step" "$config")
+  genome_bool=$(niet ".genome.active" "$config")
+  genome=$(readlink -f $(niet ".genome.sequence" "$config"))
+  annot=$(readlink -f $(niet ".genome.annotation" "$config"))
+  threads=$(niet ".threads" "$config")
+  mapcutoff=$(niet ".map_cutoff" "$config")
+  metadata=$(readlink -f $(niet ".split.metadata" "$config"))
+fi
+echo $workdir
 
 # mandatory arguments
 if [ -z ${workdir+x} ]; then 
@@ -97,12 +171,12 @@ else
     else
       if [[ $(ls "$fq" | grep .fq.gz) ]]; then 
         ls -A "$fq"/*.fq.gz > $apdir/files.txt
-        gz=ture
+        gz=true
       elif [[ $(ls "$fq" | grep .fq) ]]; then 
         ls -A "$fq"/*.fq > $apdir/files.txt
       elif [[ $(ls "$fq" | grep .fastq.gz) ]]; then 
         ls -A "$fq"/*.fastq.gz > $apdir/files.txt
-        gz=ture
+        gz=true
       elif [[ $(ls "$fq" | grep .fastq) ]]; then 
         ls -A "$fq"/*.fastq > $apdir/files.txt
       fi
@@ -123,7 +197,7 @@ echo 'Number of threads per task: ' $downstream_threads
 int='^[0-9]+$'
 
 if ! [[ -d $workdir ]]; then
-  echo "-d must be a DIRECTORY to output results and temp files"
+  echo "-o must be a DIRECTORY to output results and temp files"
   echo "$usage" >&2; exit 1
 elif ! [[ -f $sra ]]; then
   echo "-l must be a FILE, usually a .txt file, with SRA accession numbers (SRR######, one per line, last line required to be empty)"
@@ -180,12 +254,11 @@ fi
 
 # Initialize alignment environment
 conda activate mapMod
-silence_parallel
+
 ### Build genome index
 $appdir/scripts/build-index.sh $appdir $threads
 
-### Testing which mode is active and then runing the appropriate program
-
+### Testing which mode is active and then runing the appropriate pipeline
 
 if [[ $mode = "map" ]]; then
   bash $appdir/scripts/build-index.sh $appdir $threads

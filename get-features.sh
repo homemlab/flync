@@ -21,7 +21,7 @@ url=$(echo $feature | awk -F '[ ]' '{print $(2)}')
 echo $url
 if [[ "$url" == *.bw && "$track" != CAGE* ]]; then
     bigWigAverageOverBed $url $bed $output/$track'.tsv' -minMax
-elif [[ "$url" == *.bb ]]; then
+elif [[ "$url" == *.bb || "$url" == *.BigBed || "$url" == *.bigbed || "$url" == *.BB ]]; then
     while read s
     do
         chr=$(echo $s | cut -f1 -d' ')

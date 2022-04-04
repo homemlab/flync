@@ -6,7 +6,7 @@ threads=$3
 appdir=$4
 
 cd $workdir
-
+mkdir -p assemblies/stringtie
 echo ----- MERGING TRANSCRIPTOME ASSEMBLIES -----
 
 cd $workdir/assemblies/stringtie
