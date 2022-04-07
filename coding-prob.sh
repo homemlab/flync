@@ -28,7 +28,7 @@ fi
 ## Run CPAT - Minimum ORF size = 25; Top ORFs to retain =1 
 echo ----- RUNNING CODING PROBABILITY -----
 if [ ! -e cpat.ORF_prob.best.tsv ]; then
-   cpat.py --verbose false -x $workdir/cpat/fly_Hexamer.tsv -d $workdir/cpat/Fly_logitModel.RData -g $workdir/assemblies/assembled-transcripts.fa -o $workdir/cpat/cpat --min-orf 25 --top-orf 1
+   cpat.py --verbose 0 -x $workdir/cpat/fly_Hexamer.tsv -d $workdir/cpat/Fly_logitModel.RData -g $workdir/assemblies/assembled-transcripts.fa -o $workdir/cpat/cpat --min-orf 25 --top-orf 1
 fi
 echo 'Done'
 echo 'Assembly and coding probability done'

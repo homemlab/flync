@@ -1,0 +1,13 @@
+name: dgeMod
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - bc
+  - coreutils
+  - kallisto
+  - parallel
+  - r-sleuth
+variables:
+  CONDA_OVERRIDE_GLIBC: 2.31
