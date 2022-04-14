@@ -47,5 +47,7 @@ if [ ! -e $workdir/assemblies/assembled-transcripts.fa ]; then
    gffread -w $workdir/assemblies/assembled-transcripts.fa -g $appdir/genome/genome.fa $workdir/assemblies/merged.gtf
 fi
 
-
+### Filter the merged.gtf transcriptome to keep only NEW transcripts and extract their sequences ###
+cat $workdir/assemblies/merged.gtf | awk '$12 ~ /^"MSTRG*/' > $workdir/assemblies/merged-new-transcripts.gtf
+gffread -w $workdir/assemblies/assembled-new-transcripts.fa -g $appdir/genome/genome.fa $workdir/assemblies/merged-new-transcripts.gtf
 

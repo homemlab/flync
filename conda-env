@@ -1,8 +1,10 @@
 #!/bin/bash
 echo "Preparing"
+apprdir=$(dirname "$0")
+appdir=$(cd "$appdir" && pwd)
 unset CONDA_OVERRIDE_GLIBC
 echo "Installing environment..."
-ls $PWD/*.yml* > envs.txt
+ls "$appdir"/env/*.yml > envs.txt
 while read i; do
     conda env create -f $i
 done < envs.txt

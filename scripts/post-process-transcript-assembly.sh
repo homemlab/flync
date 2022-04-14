@@ -5,7 +5,7 @@
 # This will read the first file in the command $awk -f vlookup.awk <file1> <file2> into an array - a - and then will match the 5th column of file 2. If true, will print the line to STDOUT
 
 workdir=$1
-progfile=$2
+#progfile=$2
 cd $workdir
 cutoff=$(grep 'Cutoff' cpat/fly_cutoff.txt | sed 's@^[^0-9]*\([0-9]\+\)*@\1@')
 echo cpat cutoff is: $cutoff '('D. melanogaster - see CPAT docs')'

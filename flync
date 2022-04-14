@@ -5,7 +5,6 @@ import subprocess
 from pathlib import Path
 import argparse
 from argparse import RawTextHelpFormatter
-from tabulate import tabulate
 import uuid
 import sys
 
@@ -33,7 +32,11 @@ class bcolors:
     CYAN='\033[0;36m'
     PURPLE2='\033[1;35m'
 
-parser = argparse.ArgumentParser(prog='flync', description=f'{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification options:{bcolors.NC}', formatter_class=RawTextHelpFormatter)
+parser = argparse.ArgumentParser(prog='flync', description=f'''{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification options:{bcolors.NC}
+Version: {__version__}
+Author: {__author__}
+Contact: {__mail__}
+''', formatter_class=RawTextHelpFormatter)
 
 parser.add_argument('--version', action='version',
                     version='%(prog)s {version}'.format(version=__version__))
@@ -59,7 +62,7 @@ run.add_argument(
 
 
 ### SRA PIPELINE ARGUMENTS ###
-sra = subparsers.add_parser('sra', help=f'Run full pipeline using a <list.txt> of SRA accession numbers (usually SRR########). \nThese fastq files will be stored locally while pipeline is running. \nBe sure to run {bcolors.BOLD}{bcolors.CYAN}flync -s clean{bcolors.NC} to remove them afterwards.', formatter_class=RawTextHelpFormatter)
+sra = subparsers.add_parser('sra', help=f'Run full pipeline using a <list.txt> of SRA accession numbers.', formatter_class=RawTextHelpFormatter)
 
 sra.add_argument(
     '--list',
@@ -252,16 +255,15 @@ fastq.add_argument(
 )
 
 args = parser.parse_args()
-print(args)
-if args.subcommand == 'sra':
-    process = subprocess.Popen([appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()],
+
+def main(cmd_string):
+    process = subprocess.Popen(cmd_string,
         bufsize = 1,
-        stdout = subprocess.PIPE, 
+        stdout = subprocess.PIPE,
         stderr = subprocess.STDOUT,
         encoding='utf-8',
         errors = 'replace'
-        )
- 
+    )
     while True:
         realtime_output = process.stdout.readline()
         if realtime_output == '' and process.poll() is not None:
@@ -269,4 +271,15 @@ if args.subcommand == 'sra':
         if realtime_output:
             print(realtime_output.strip(), flush=False)
             sys.stdout.flush()
-    
+
+if args.subcommand == 'run':
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()]
+    main(cmd)
+
+elif args.subcommand == 'sra':
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()]
+    main(cmd)
+
+elif args.subcommand == 'fastq':
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()]
+    main(cmd)

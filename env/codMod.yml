@@ -5,8 +5,11 @@ channels:
   - defaults
 dependencies:
   - coreutils
+  - setuptools=61.2.0
+  - sqlite=3.37
   - wget
   - pip
+  - r-base=4.0.3
   - pip:
     - CPAT
 variables:

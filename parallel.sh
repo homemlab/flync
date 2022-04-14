@@ -5,16 +5,19 @@ workdir=$(readlink -f $1)
 sra=$(readlink -f $2)
 threads=$3
 appdir=$(readlink -f $4)
-#metadata=$(readlink -f $5)
+metadata=$(readlink -f $5)
 #genome=$(readlink -f $6)
 #annot=$(readlink -f $7)
 
 jobs=$(wc -l $sra | cut -f1 -d' ')
 
 echo 'Number of tasks for this job: ' $jobs
-
-downstream_threads=$(expr $threads / $jobs)
-downstream_threads=${downstream_threads%.*}
+if [[ $threads -ge $jobs ]]; then
+    downstream_threads=$(expr $threads / $jobs)
+    downstream_threads=${downstream_threads%.*}
+else
+    downstream_threads=1
+fi
 
 echo 'Number of threads per task: ' $downstream_threads
 
@@ -39,39 +42,45 @@ rm $appdir/cmd.out
 ## RUN SCRIPTS FOR GETTING GENOME AND INFO ON SRA RUNS
 $appdir/scripts/get-genome.sh $appdir
 $appdir/scripts/get-sra-info.sh $workdir $sra
-$appdir/scripts/build-index.sh $appdir $threads
 
 conda activate mapMod
 
-## SILENCE PARALLEL FIRST RUN ##
-parallel --citation &> $appdir/cmd.out
-echo will cite &> $appdir/cmd.out
-rm $appdir/cmd.out
+# ## SILENCE PARALLEL FIRST RUN ##
+# parallel --citation &> $appdir/cmd.out
+# echo will cite &> $appdir/cmd.out
+# rm $appdir/cmd.out
 
 $appdir/scripts/build-index.sh $appdir $threads
 parallel -k --lb -j $jobs -a $sra $appdir/tux2map.sh $workdir {} $downstream_threads $appdir
 
 conda activate assembleMod
 
-## SILENCE PARALLEL FIRST RUN ##
-parallel --citation &> $appdir/cmd.out
-echo will cite &> $appdir/cmd.out
-rm $appdir/cmd.out
-
-
 parallel -k --lb -j $jobs -a $sra $appdir/tux2assemble.sh $workdir {} $downstream_threads $appdir
+
 $appdir/tux2merge.sh $workdir $sra $threads $appdir
 
 conda activate codMod
 
-## SILENCE PARALLEL FIRST RUN ##
-parallel --citation &> $appdir/cmd.out
-echo will cite &> $appdir/cmd.out
-rm $appdir/cmd.out
-
 $appdir/coding-prob.sh $workdir $appdir $threads
 
 $appdir/class-new-transfrags.sh $workdir $threads $appdir
+
+conda activate assembleMod
+
+### Extract transcript sequences from filtered .gtf file with new non-coding & coding transcripts ###
+gffread -w $workdir/results/new-non-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-non-coding.gtf
+
+gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf
+
+conda activate dgeMod
+
+$appdir/dea.sh $workdir $sra $appdir $threads $metadata
+
+# if [[ -z {$metadata+x} ]]; then
+#     echo "Skipping DGE since no metadata file was provided..."
+# else
+#     $appdir/dea.sh $workdir $sra $appdir $threads $metadata
+# fi
 
 conda deactivate
 #

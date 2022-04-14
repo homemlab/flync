@@ -1,14 +1,14 @@
-name: assembleMod
+name: dgeMod
 channels:
   - conda-forge
   - bioconda
   - defaults
 dependencies:
-  - coreutils
-  - wget
   - bc
-  - cufflinks
-  - stringtie
+  - coreutils
+  - kallisto
   - parallel
+  - r-sleuth
+  - r-base=4.0.3
 variables:
   CONDA_OVERRIDE_GLIBC: 2.31

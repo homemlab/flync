@@ -157,8 +157,9 @@ elif [[ $mode = "kall" ]]; then
     wait
     bash $appdir/scripts/pre-process-mapping-stats.sh $workdir
     wait
-    python3 $appdir/scripts/map-stats.py $mapcutoff $workdir
-    sra2=$workdir/results/filtered_list.txt
+    # python3 $appdir/scripts/map-stats.py $mapcutoff $workdir
+    # sra2=$workdir/results/filtered_list.txt
+    sra2=$sra
     wait
     bash $appdir/scripts/transcriptome-assembly.sh $workdir $sra2 $appdir
     wait

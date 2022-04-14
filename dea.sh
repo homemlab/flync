@@ -11,15 +11,6 @@ cd $workdir
 mkdir -p kallisto/{non-coding,coding}
 cd kallisto
 
-### Extract transcript sequences from filtered .gtf file with new non-coding & coding transcripts ###
-if [ ! -e $workdir/results/new-non-coding-transcripts.fa ]; then
-    gffread -w $workdir/results/new-non-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-non-coding.gtf
-fi
-
-if [ ! -e $workdir/results/new-coding-transcripts.fa ]; then
-    gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf
-fi
-
 ### Run Kallisto index on non-coding & coding ###
 if [ ! -e $workdir/kallisto/non-coding/new-non-coding-transcripts.fa.idx ]; then
     kallisto index -i $workdir/kallisto/non-coding/new-non-coding-transcripts.fa.idx $workdir/results/new-non-coding-transcripts.fa
