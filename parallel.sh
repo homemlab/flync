@@ -51,19 +51,19 @@ conda activate mapMod
 # rm $appdir/cmd.out
 
 $appdir/scripts/build-index.sh $appdir $threads
-parallel -k --lb -j $jobs -a $sra $appdir/tux2map.sh $workdir {} $downstream_threads $appdir
+parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir
 
 conda activate assembleMod
 
-parallel -k --lb -j $jobs -a $sra $appdir/tux2assemble.sh $workdir {} $downstream_threads $appdir
+parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir
 
-$appdir/tux2merge.sh $workdir $sra $threads $appdir
+$appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir
 
 conda activate codMod
 
-$appdir/coding-prob.sh $workdir $appdir $threads
+$appdir/scripts/coding-prob.sh $workdir $appdir $threads
 
-$appdir/class-new-transfrags.sh $workdir $threads $appdir
+$appdir/scripts/class-new-transfrags.sh $workdir $threads $appdir
 
 conda activate assembleMod
 
@@ -74,7 +74,7 @@ gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.f
 
 conda activate dgeMod
 
-$appdir/dea.sh $workdir $sra $appdir $threads $metadata
+$appdir/scripts/dea.sh $workdir $sra $appdir $threads $metadata
 
 # if [[ -z {$metadata+x} ]]; then
 #     echo "Skipping DGE since no metadata file was provided..."
@@ -84,7 +84,7 @@ $appdir/dea.sh $workdir $sra $appdir $threads $metadata
 
 conda deactivate
 #
-#$appdir/dea.sh $workdir $sra $appdir $threads $metadata
+#$appdir/scripts/dea.sh $workdir $sra $appdir $threads $metadata
 # 
 # ls $workdir/results/*.gtf* > $appdir/gtfs.txt
 # parallel -k --lb -j $jobs -a $appdir/gtfs.txt $appdir/scripts/gtf-to-bed.sh {}

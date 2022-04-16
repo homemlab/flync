@@ -8,4 +8,3 @@ H3K4me3_S2	https://epd.epfl.ch/ucsc/epdHub/dm6/GSM480156_dm3-S2-H3K4me3.bw
 Pol2_S2	https://epd.epfl.ch/ucsc/epdHub/dm6/GSM480159_dm3-S2-PolII.bw
 JASPAR_TF	http://expdata.cmmt.ubc.ca/JASPAR/downloads/UCSC_tracks/2020/JASPAR2020_dm6.bb
 GCcont	http://hgdownload.soe.ucsc.edu/gbdb/dm6/bbi/gc5BaseBw/gc5Base.bw
-scATAC  http://ucsctracks.aertslab.org/papers/FlyBrain/dm6/bed/brainPeaks.BigBed
