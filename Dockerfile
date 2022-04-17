@@ -1,5 +1,7 @@
 FROM continuumio/anaconda3:latest
 
+SHELL ["/bin/bash", "-c"]
+
 COPY . /bin/app
 
 RUN chmod 755 /bin/app/conda-env \
