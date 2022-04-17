@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - 'main'
+      - 'fastq'
+    tags:
+      - v*
+  pull-request:
+    branches:
+      - 'main'
+      - 'fastq'
     tags:
       - v*
 
