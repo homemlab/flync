@@ -7,7 +7,7 @@ on:
       - 'fastq'
     tags:
       - v*
-  pull-request:
+  pull_request:
     branches:
       - 'main'
       - 'fastq'
