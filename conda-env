@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Preparing"
-apprdir=$(dirname "$0")
+appdir=$(dirname "$0")
 appdir=$(cd "$appdir" && pwd)
 unset CONDA_OVERRIDE_GLIBC
 echo "Installing environment..."
