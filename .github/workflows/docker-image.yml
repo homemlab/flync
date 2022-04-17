@@ -3,13 +3,13 @@ name: Build and publish Docker image
 on:
   push:
     branches:
-      - 'main'
+      # - 'main'
       - 'fastq'
     tags:
       - v*
   pull_request:
     branches:
-      - 'main'
+      # - 'main'
       - 'fastq'
     tags:
       - v*
@@ -32,7 +32,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          flavor: latest=true
+          # flavor: latest=true
           images: rfcdsantos/flync
           tags: |
             type=ref,event=branch
