@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 feature=$1
 bed=$(readlink -f $2)
 outfile=$(echo $2 | awk -F'.' '{print $(NF-2)}')
-workdir=$3
+workdir=$(readlink -f $3)
 output=$workdir/features/$outfile
 
 # offset is the number of basepairs up and downstream of the transcript beguining (variables start or end depending on strand + or -).
@@ -14,13 +14,13 @@ else
 fi
 
 mkdir -p $output 
+cd $output
 
 track=$(echo $feature | awk -F '[ ]' '{print $(1)}')
-echo $track
 url=$(echo $feature | awk -F '[ ]' '{print $(2)}')
-echo $url
+
 if [[ "$url" == *.bw && "$track" != CAGE* ]]; then
-    bigWigAverageOverBed $url $bed $output/$track'.tsv' -minMax
+    bigWigAverageOverBed $url $bed $track'.tsv' -minMax
 elif [[ "$url" == *.bb || "$url" == *.BigBed || "$url" == *.bigbed || "$url" == *.BB ]]; then
     while read s
     do
@@ -32,10 +32,10 @@ elif [[ "$url" == *.bb || "$url" == *.BigBed || "$url" == *.bigbed || "$url" == 
         mean=$(bigBedSummary $url $chr $start $end 1 -type=mean)
         min=$(bigBedSummary $url $chr $start $end 1 -type=min)
         max=$(bigBedSummary $url $chr $start $end 1 -type=max)
-        echo -e $name'\t'$cov'\t'$mean'\t'$min'\t'$max >> $output/$track'.tsv'
+        echo -e $name'\t'$cov'\t'$mean'\t'$min'\t'$max >> $track'.tsv'
     done < $bed
 elif [[ "$track" == 'CAGE_pos' ]]; then
-    bigWigAverageOverBed $url $bed $output/$track'_whole_trans.tsv' -minMax
+    bigWigAverageOverBed $url $bed $url'_whole_trans.tsv' -minMax
     while read s
     do
         chr=$(echo $s | cut -f1 -d' ')
@@ -50,14 +50,14 @@ elif [[ "$track" == 'CAGE_pos' ]]; then
         strd=$(echo $s | cut -f6 -d ' ')
         if [ $strd == '+' ]; then
             startPosTSS=$(bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=max)
-            echo -e $name'\t'$startPosTSS >> $output/$track'.tsv'
+            echo -e $name'\t'$startPosTSS >> $track'.tsv'
         elif [ $strd == '.' ]; then
             startPosTSS=$(bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=max)
-            echo -e $name'\t'$startPosTSS >> $output/$track'.tsv'
+            echo -e $name'\t'$startPosTSS >> $track'.tsv'
         fi
     done < $bed
 elif [[ "$track" == 'CAGE_neg' ]]; then
-    bigWigAverageOverBed $url $bed $output/$track'_whole_trans.tsv' -minMax
+    bigWigAverageOverBed $url $bed $url'_whole_trans.tsv' -minMax
     while read s
     do
         chr=$(echo $s | cut -f1 -d' ')
@@ -71,16 +71,16 @@ elif [[ "$track" == 'CAGE_neg' ]]; then
         strd=$(echo $s | cut -f6 -d ' ')
         if [ $strd == '-' ]; then
             endNegTSS=$(bigWigSummary $url $chr $endNegOff $endPosOff 1 -type=min)
-            echo -e $name'\t'$endNegTSS >> $output/$track'.tsv'
+            echo -e $name'\t'$endNegTSS >> $track'.tsv'
         elif [ $strd == '.' ]; then
             endNegTSS=$(bigWigSummary $url $chr $endNegOff $endPosOff 1 -type=min)
-            echo -e $name'\t'$endNegTSS >> $output/$track'.tsv'
+            echo -e $name'\t'$endNegTSS >> $track'.tsv'
         fi
     done < $bed
 fi
 
 # Write a .csv file with the filepaths for the tables to be processed in python Pandas
-ls $output | grep tsv | sed 's/.tsv//g' > names.tmp
-find $output/*.tsv > path.tmp
-paste names.tmp path.tmp > $output/paths.tsv
-rm names.tmp path.tmp
+# ls $output | grep tsv | sed 's/.tsv//g' > names.tmp
+# find $output/*.tsv > path.tmp
+# paste names.tmp path.tmp > $output/paths.tsv
+# rm names.tmp path.tmp

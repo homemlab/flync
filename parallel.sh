@@ -18,12 +18,12 @@ CYAN='\033[0;36m'
 PURPLE='\033[1;35m'
 NC='\033[0m'
 
-touch $workdir/run.log &> $appdir/cmd.out
+touch "$workdir"/run.log
 
 ## DEFINE THREADS FOR RUUNING PIPELINE ##
 jobs=$(wc -l $sra | cut -f1 -d' ')
 
-echo 'Number of samples for this run: ' $jobs &> $appdir/cmd.out
+echo 'Number of samples for this run: ' $jobs &>> $workdir/run.log
 if [[ $threads -ge $jobs ]]; then
     downstream_threads=$(expr $threads / $jobs)
     downstream_threads=${downstream_threads%.*}
@@ -31,8 +31,8 @@ else
     jobs=$threads
     downstream_threads=1
 fi
-echo 'Maximum samples running in parallel: ' $threads &> $appdir/cmd.out
-echo 'Number of threads per running sample: ' $downstream_threads &> $appdir/cmd.out
+echo 'Maximum samples running in parallel: ' $threads &>> $workdir/run.log
+echo 'Number of threads per running sample: ' $downstream_threads &>> $workdir/run.log
 
 
 ## ANIMATED OUTPUT ##
@@ -114,50 +114,50 @@ ${CYAN}[-] Pseudoalignment and DGE analysis (if -m)${NC}"
     exit) break ;;
     1)
       ## RUN SCRIPTS FOR GETTING GENOME AND INFO ON SRA RUNS
-      conda activate infoMod &> $workdir/run.log
+      conda activate infoMod &>> $workdir/run.log
 
       ## SILENCE PARALLEL FIRST RUN ##
       parallel --citation &> $appdir/cmd.out
       echo will cite &> $appdir/cmd.out
       rm $appdir/cmd.out
 
-      mkdir -p $appdir/genome &> $workdir/run.log
-      $appdir/scripts/get-genome.sh $appdir &> $workdir/run.log
+      mkdir -p $appdir/genome &>> $workdir/run.log
+      $appdir/scripts/get-genome.sh $appdir &>> $workdir/run.log
       PIPE_STEP=2
       ;;
     2)
-      $appdir/scripts/get-sra-info.sh $workdir $sra &> $workdir/run.log
+      $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
       PIPE_STEP=3
       ;;
     3)
-      conda activate mapMod &> $workdir/run.log
-      $appdir/scripts/build-index.sh $appdir $threads &> $workdir/run.log
-      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir &> $workdir/run.log
+      conda activate mapMod &>> $workdir/run.log
+      $appdir/scripts/build-index.sh $appdir $threads &>> $workdir/run.log
+      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
       PIPE_STEP=4
       ;;
     4)
-      conda activate assembleMod &> $workdir/run.log
-      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &> $workdir/run.log
-      $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &> $workdir/run.log
+      conda activate assembleMod &>> $workdir/run.log
+      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
+      $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &>> $workdir/run.log
       PIPE_STEP=5
       ;;
     5)
-      conda activate codMod &> $workdir/run.log
-      $appdir/scripts/coding-prob.sh $workdir $appdir $threads &> $workdir/run.log
-      $appdir/scripts/class-new-transfrags.sh $workdir $threads $appdir &> $workdir/run.log
+      conda activate codMod &>> $workdir/run.log
+      $appdir/scripts/coding-prob.sh $workdir $appdir $threads &>> $workdir/run.log
+      $appdir/scripts/class-new-transfrags.sh $workdir $threads $appdir &>> $workdir/run.log
       PIPE_STEP=6
       ;;
     6)
-      conda activate assembleMod &> $workdir/run.log
+      conda activate assembleMod &>> $workdir/run.log
       ### Extract transcript sequences from filtered .gtf file with new non-coding & coding transcripts ###
-      gffread -w $workdir/results/new-non-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-non-coding.gtf &> $workdir/run.log
-      gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf &> $workdir/run.log
+      gffread -w $workdir/results/new-non-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-non-coding.gtf &>> $workdir/run.log
+      gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf &>> $workdir/run.log
 
-      conda activate dgeMod &> $workdir/run.log
+      conda activate dgeMod &>> $workdir/run.log
       if [[ -z {$metadata+x} ]]; then
-          echo "Skipping DGE since no metadata file was provided..." &> $workdir/run.log
+          echo "Skipping DGE since no metadata file was provided..." &>> $workdir/run.log
       else
-          $appdir/scripts/dea.sh $workdir $sra $appdir $threads $metadata &> $workdir/run.log
+          $appdir/scripts/dea.sh $workdir $sra $appdir $threads $metadata &>> $workdir/run.log
           echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
@@ -167,7 +167,16 @@ ${GREEN}[🎲] Calculating conding probability of new transcripts${NC}
 ${GREEN}[📈] Pseudoalignment and DGE analysis (if -m)${NC}"
 
       fi
-      conda deactivate &> $workdir/run.log
+      conda deactivate &>> $workdir/run.log
+      PIPE_STEP=7
+      ;;
+    7)
+      conda activate featureMod
+      $appdir/scripts/gtf-to-bed.sh $workdir/results/new-non-coding.gtf
+      parallel -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding
+      
+      $appdir/scripts/gtf-to-bed.sh $workdir/results/new-coding.gtf
+      parallel -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $workdir/results/new-coding.chr.bed $workdir/results/coding
       PIPE_STEP=0
       ;;
       #

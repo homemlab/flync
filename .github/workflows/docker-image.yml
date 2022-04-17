@@ -38,7 +38,7 @@ jobs:
           flavor: latest=auto
           images: rfcdsantos/flync
           tags: |
-            type=raw,value=foo,enable=true,priority=200,value=${{ env.BRANCH }},suffix={{date 'YYYYMMDD'}}
+            type=raw,value=${{ env.BRANCH }},suffix={{date 'YYYYMMDD'}}
             type=edge
             type=ref,event=branch
             type=ref,event=tag
