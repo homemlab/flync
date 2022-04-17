@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -u
+# -*- coding: utf-8 -*-
 
 # IMPORTS
 import subprocess
@@ -257,27 +258,39 @@ fastq.add_argument(
 args = parser.parse_args()
 
 def main(cmd_string):
-    process = subprocess.Popen(cmd_string,
-        bufsize = 1,
-        stdout = subprocess.PIPE,
-        stderr = subprocess.STDOUT,
-        encoding='utf-8',
-        errors = 'replace'
-    )
-    while True:
-        realtime_output = process.stdout.readline()
-        if realtime_output == '' and process.poll() is not None:
-            break
-        if realtime_output:
-            print(realtime_output.strip(), flush=False)
-            sys.stdout.flush()
+    subprocess.Popen(cmd_string,
+        stdout = sys.stdout,
+        stderr = sys.stderr,
+    ).communicate()
+
+# def main2(cmd_string):
+#     process = subprocess.Popen(cmd_string,
+#         bufsize = 1,
+#         stdout = subprocess.PIPE,
+#         stderr = subprocess.STDOUT,
+#         encoding='utf-8',
+#         errors = 'replace'
+#     )
+#     while True:
+#         realtime_output = process.stdout.read(1)
+#         if realtime_output == '' and process.poll() is not None:
+#             break
+#         if realtime_output:
+#             print(realtime_output.strip(), flush=False)
+#             sys.stdout.flush()
+
+print(f'''{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification{bcolors.NC}
+Version: {__version__}
+Author: {__author__}
+Contact: {__mail__}
+''')
 
 if args.subcommand == 'run':
     cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()]
     main(cmd)
 
 elif args.subcommand == 'sra':
-    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()]
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix(), args.metadata.as_posix()]
     main(cmd)
 
 elif args.subcommand == 'fastq':

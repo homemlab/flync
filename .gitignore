@@ -1,3 +1,4 @@
 /.dockerignore
 genome/
 .vscode/
+test_run/
