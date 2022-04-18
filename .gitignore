@@ -2,3 +2,4 @@
 genome/
 .vscode/
 test_run/
+/model/*.sav
