@@ -187,4 +187,3 @@ dependencies:
   - zstd=1.5.2
   - pip:
     - pickle-mixin==1.0.2
-prefix: /users3/chlab/rsantos/anaconda3/envs/predictMod
