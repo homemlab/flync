@@ -174,9 +174,21 @@ ${GREEN}[📈] Pseudoalignment and DGE analysis (if -m)${NC}"
       conda activate featureMod
       $appdir/scripts/gtf-to-bed.sh $workdir/results/new-non-coding.gtf
       parallel -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding
-      
+            
       $appdir/scripts/gtf-to-bed.sh $workdir/results/new-coding.gtf
       parallel -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $workdir/results/new-coding.chr.bed $workdir/results/coding
+      
+      # Write a .csv file with the filepaths for the tables to be processed in python Pandas
+      ls $workdir/results/non-coding/features | grep tsv | sed 's/.tsv//g' > names.tmp
+      find $workdir/results/non-coding/features/*.tsv > path.tmp
+      paste names.tmp path.tmp > $workdir/results/non-coding/features/paths.tsv
+      rm names.tmp path.tmp
+      
+      ls $workdir/results/coding/features | grep tsv | sed 's/.tsv//g' > names.tmp
+      find $workdir/results/coding/features/*.tsv > path.tmp
+      paste names.tmp path.tmp > $workdir/results/coding/features/paths.tsv
+      rm names.tmp path.tmp
+
       PIPE_STEP=0
       ;;
       #

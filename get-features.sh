@@ -35,7 +35,7 @@ elif [[ "$url" == *.bb || "$url" == *.BigBed || "$url" == *.bigbed || "$url" == 
         echo -e $name'\t'$cov'\t'$mean'\t'$min'\t'$max >> $track'.tsv'
     done < $bed
 elif [[ "$track" == 'CAGE_pos' ]]; then
-    bigWigAverageOverBed $url $bed $url'_whole_trans.tsv' -minMax
+    bigWigAverageOverBed $url $bed $track'_whole_trans.tsv' -minMax
     while read s
     do
         chr=$(echo $s | cut -f1 -d' ')
@@ -57,7 +57,7 @@ elif [[ "$track" == 'CAGE_pos' ]]; then
         fi
     done < $bed
 elif [[ "$track" == 'CAGE_neg' ]]; then
-    bigWigAverageOverBed $url $bed $url'_whole_trans.tsv' -minMax
+    bigWigAverageOverBed $url $bed $track'_whole_trans.tsv' -minMax
     while read s
     do
         chr=$(echo $s | cut -f1 -d' ')
@@ -78,9 +78,3 @@ elif [[ "$track" == 'CAGE_neg' ]]; then
         fi
     done < $bed
 fi
-
-# Write a .csv file with the filepaths for the tables to be processed in python Pandas
-# ls $output | grep tsv | sed 's/.tsv//g' > names.tmp
-# find $output/*.tsv > path.tmp
-# paste names.tmp path.tmp > $output/paths.tsv
-# rm names.tmp path.tmp
