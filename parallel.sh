@@ -58,7 +58,7 @@ while true;
 do
   if [[ PIPE_STEP -eq 0 ]]; then
     BLA::stop_loading_animation
-    echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
@@ -78,7 +78,7 @@ ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
 ${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 2 ]]; then
-    echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${CYAN}[-] Gathering sample information from SRA database {flync sra}${NC}
 ${CYAN}[ ] Mapping samples to reference genome${NC}
@@ -87,7 +87,7 @@ ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
 ${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 3 ]]; then
-    echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${CYAN}[-] Mapping samples to reference genome${NC}
@@ -96,7 +96,7 @@ ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
 ${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 4 ]]; then
-    echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
@@ -105,7 +105,7 @@ ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
 ${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 5 ]]; then
-    echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
@@ -114,7 +114,7 @@ ${CYAN}[-] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
 ${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 6 ]]; then
-    echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
@@ -123,7 +123,7 @@ ${GREEN}[🎲] Calculating conding probability of new transcripts${NC}
 ${CYAN}[-] Pseudoalignment and DGE analysis (if -m)${NC}
 ${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 7 ]]; then
-    echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
