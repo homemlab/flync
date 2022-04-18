@@ -18,6 +18,7 @@ CYAN='\033[0;36m'
 PURPLE='\033[1;35m'
 NC='\033[0m'
 
+mkdir -p $workdir
 touch "$workdir"/run.log
 
 ## DEFINE THREADS FOR RUUNING PIPELINE ##
@@ -44,7 +45,6 @@ trap BLA::stop_loading_animation SIGINT
 # BLA::start_loading_animation "${BLA_braille_whitespace[@]}"
 # BLA::stop_loading_animation
 
-mkdir -p $workdir
 conda_path=$(conda info | grep -i 'base environment' | awk '{print$(4)}')
 conda_sh=$conda_path'/etc/profile.d/conda.sh'
 
@@ -76,7 +76,7 @@ ${CYAN}[ ] Mapping samples to reference genome${NC}
 ${CYAN}[ ] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
-${CYAN}[-] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 2 ]]; then
     echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
@@ -85,7 +85,7 @@ ${CYAN}[ ] Mapping samples to reference genome${NC}
 ${CYAN}[ ] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
-${CYAN}[-] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 3 ]]; then
     echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
@@ -94,7 +94,7 @@ ${CYAN}[-] Mapping samples to reference genome${NC}
 ${CYAN}[ ] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
-${CYAN}[-] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 4 ]]; then
     echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
@@ -103,7 +103,7 @@ ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${CYAN}[-] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
-${CYAN}[-] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 5 ]]; then
     echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
@@ -112,7 +112,7 @@ ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${GREEN}[🧱] Building transcriptomes${NC}
 ${CYAN}[-] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Pseudoalignment and DGE analysis (if -m)${NC}
-${CYAN}[-] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 6 ]]; then
     echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
@@ -121,7 +121,7 @@ ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${GREEN}[🧱] Building transcriptomes${NC}
 ${GREEN}[🎲] Calculating conding probability of new transcripts${NC}
 ${CYAN}[-] Pseudoalignment and DGE analysis (if -m)${NC}
-${CYAN}[-] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}"
   elif [[ PIPE_STEP -eq 7 ]]; then
     echo -e "\r\e[7A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
