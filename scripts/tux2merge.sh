@@ -18,9 +18,8 @@ if [ ! -e $workdir/assemblies/stringtie/merged.gtf ]; then
 fi
 
 cd $workdir/assemblies/cufflinks
-mkdir -p $workdir/assemblies/cufflinks/merged
 
-if [ ! -d $workdir/assemblies/cufflinks/merged.gtf ]; then
+if [ ! -e $workdir/assemblies/cufflinks/merged.gtf ]; then
    stringtie --merge $workdir/assemblies/cufflinks/cuffmerge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/cufflinks/merged.gtf
 fi
 echo 'Done'
