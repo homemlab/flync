@@ -31,9 +31,9 @@ echo ----- MAPPING READS $2 -----
 if [ ! -e data/$2/*.sorted.bam ] && [ ! -e data/$2/*.bam ] && [ ! -e data/$2/*.sam ]; then
     lay=$(grep $2 $workdir/results/runinfo.csv | cut -f6 -d,)
     if [[ $lay == 'SINGLE' ]]; then
-        hisat2 -p $threads -x $appdir/genome/genome.idx -U $workdir/data/$2/$2'.fastq.gz' -S $workdir/data/$2/$2'.sam' --dta --dta-cufflinks --known-splicesite-infile $appdir/genome/genome.sj &> $workdir/data/$2.hisat2.log
+        hisat2 -p $threads -x $appdir/genome/genome.idx -U $workdir/data/$2/$2'.fastq.gz' -S $workdir/data/$2/$2'.sam' --dta --dta-cufflinks --known-splicesite-infile $appdir/genome/genome.ss &> $workdir/data/$2.hisat2.log
     else
-        hisat2 -p $threads -x $appdir/genome/genome.idx -1 $workdir/data/$2/$2'_1.fastq.gz' -2 $workdir/data/$2/$2'_2.fastq.gz' -S $workdir/data/$2/$2'.sam' --dta --dta-cufflinks --known-splicesite-infile $appdir/genome/genome.sj &> $workdir/data/$2.hisat2.log
+        hisat2 -p $threads -x $appdir/genome/genome.idx -1 $workdir/data/$2/$2'_1.fastq.gz' -2 $workdir/data/$2/$2'_2.fastq.gz' -S $workdir/data/$2/$2'.sam' --dta --dta-cufflinks --known-splicesite-infile $appdir/genome/genome.ss &> $workdir/data/$2.hisat2.log
     fi
 fi
 echo 'Done'

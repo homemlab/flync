@@ -177,7 +177,7 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf &>> $workdir/run.log
 
       conda activate dgeMod &>> $workdir/run.log
-      if [[ -z {$metadata+x} ]]; then
+      if [[ -z ${metadata+x} ]]; then
           echo "Skipping DGE since no metadata file was provided..." &>> $workdir/run.log
       else
           $appdir/scripts/dea.sh $workdir $sra $appdir $threads $metadata &>> $workdir/run.log
@@ -189,28 +189,14 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       conda activate featureMod
       
       mkdir -p $workdir/results/non-coding/features
-      mkdir -p $workdir/results/coding/features
       
-      parallel --citation &> $appdir/cmd.out
-      echo will cite &> $appdir/cmd.out
-      rm $appdir/cmd.out
-
       $appdir/scripts/gtf-to-bed.sh $workdir/results/new-non-coding.gtf
-      parallel -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/scripts/get-feature-info.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding
+      parallel --no-notice -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/get-features.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding
 
       # Write a .csv file with the filepaths for the tables to be processed in python Pandas
       ls $workdir/results/non-coding/features | grep tsv | sed 's/.tsv//g' > names.tmp
       find $workdir/results/non-coding/features/*.tsv > path.tmp
       paste names.tmp path.tmp > $workdir/results/non-coding/features/paths.tsv
-      rm names.tmp path.tmp
-
-      $appdir/scripts/gtf-to-bed.sh $workdir/results/new-coding.gtf
-      parallel -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/scripts/get-feature-info.sh {} $workdir/results/new-coding.chr.bed $workdir/results/coding
-
-      # Write a .csv file with the filepaths for the tables to be processed in python Pandas
-      ls $workdir/results/coding/features | grep tsv | sed 's/.tsv//g' > names.tmp
-      find $workdir/results/coding/features/*.tsv > path.tmp
-      paste names.tmp path.tmp > $workdir/results/coding/features/paths.tsv
       rm names.tmp path.tmp
 
       PIPE_STEP=0

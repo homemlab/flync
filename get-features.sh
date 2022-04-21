@@ -2,7 +2,7 @@
 
 feature=$1
 bed=$(readlink -f $2)
-outfile=$(echo $2 | awk -F'.' '{print $(NF-2)}')
+outfile=$(echo $2|sed 's/\(.*\)\..*/\1/')
 workdir=$(readlink -f $3)
 output=$workdir/features/$outfile
 
@@ -20,7 +20,7 @@ track=$(echo $feature | awk -F '[ ]' '{print $(1)}')
 url=$(echo $feature | awk -F '[ ]' '{print $(2)}')
 
 if [[ "$url" == *.bw && "$track" != CAGE* ]]; then
-    bigWigAverageOverBed $url $bed $track'.tsv' -minMax
+    bigWigAverageOverBed $url $bed $outfile$track'.tsv' -minMax
 elif [[ "$url" == *.bb || "$url" == *.BigBed || "$url" == *.bigbed || "$url" == *.BB ]]; then
     while read s
     do
@@ -32,7 +32,7 @@ elif [[ "$url" == *.bb || "$url" == *.BigBed || "$url" == *.bigbed || "$url" == 
         mean=$(bigBedSummary $url $chr $start $end 1 -type=mean)
         min=$(bigBedSummary $url $chr $start $end 1 -type=min)
         max=$(bigBedSummary $url $chr $start $end 1 -type=max)
-        echo -e $name'\t'$cov'\t'$mean'\t'$min'\t'$max >> $track'.tsv'
+        echo -e $name'\t'$cov'\t'$mean'\t'$min'\t'$max >> $outfile$track'.tsv'
     done < $bed
 elif [[ "$track" == 'CAGE_pos' ]]; then
     bigWigAverageOverBed $url $bed $track'_whole_trans.tsv' -minMax
@@ -50,10 +50,10 @@ elif [[ "$track" == 'CAGE_pos' ]]; then
         strd=$(echo $s | cut -f6 -d ' ')
         if [ $strd == '+' ]; then
             startPosTSS=$(bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=max)
-            echo -e $name'\t'$startPosTSS >> $track'.tsv'
+            echo -e $name'\t'$startPosTSS >> $outfile$track'.tsv'
         elif [ $strd == '.' ]; then
             startPosTSS=$(bigWigSummary $url $chr $startNegOff $startPosOff 1 -type=max)
-            echo -e $name'\t'$startPosTSS >> $track'.tsv'
+            echo -e $name'\t'$startPosTSS >> $outfile$track'.tsv'
         fi
     done < $bed
 elif [[ "$track" == 'CAGE_neg' ]]; then
@@ -71,10 +71,10 @@ elif [[ "$track" == 'CAGE_neg' ]]; then
         strd=$(echo $s | cut -f6 -d ' ')
         if [ $strd == '-' ]; then
             endNegTSS=$(bigWigSummary $url $chr $endNegOff $endPosOff 1 -type=min)
-            echo -e $name'\t'$endNegTSS >> $track'.tsv'
+            echo -e $name'\t'$endNegTSS >> $outfile$track'.tsv'
         elif [ $strd == '.' ]; then
             endNegTSS=$(bigWigSummary $url $chr $endNegOff $endPosOff 1 -type=min)
-            echo -e $name'\t'$endNegTSS >> $track'.tsv'
+            echo -e $name'\t'$endNegTSS >> $outfile$track'.tsv'
         fi
     done < $bed
 fi

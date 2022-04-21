@@ -2,7 +2,7 @@
 
 ## Prepare BED files for getting feature tables for ML-training and testing
 
-outfile=`echo $1|sed 's/\(.*\)\..*/\1/'`
+outfile=$(echo $2|sed 's/\(.*\)\..*/\1/')
 input=$(readlink -f $1)
 
 # Use BEDOPS convert2bed script to convert gtf to bed
