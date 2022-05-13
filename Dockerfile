@@ -5,14 +5,14 @@ SHELL ["/bin/bash", "-c"]
 COPY . /bin/app
 
 # Required for ballgown to execute
-RUN mkdir -p /tmp \
+RUN && add-apt-repository universe \
+&& apt-get install libncurses5 \
+&& mkdir -p /tmp \
 && cd /tmp \
 && wget -c http://ftp.debian.org/debian/pool/main/r/readline6/libreadline6_6.3-8+b3_amd64.deb \
 && wget -c http://ftp.debian.org/debian/pool/main/g/glibc/multiarch-support_2.19-18+deb8u10_amd64.deb \
 && apt install ./libreadline6_6.3-8+b3_amd64.deb ./multiarch-support_2.19-18+deb8u10_amd64.deb \
-&& rm -rf /tmp \
-&& add-apt-repository universe \
-&& apt-get install libncurses5
+&& rm -rf /tmp
 
 RUN chmod 755 /bin/app/conda-env \
     && bash /bin/app/conda-env \
