@@ -4,3 +4,4 @@ genome/
 test_run/
 /model/*.sav
 run_L3vs48hP
+3dA/*
