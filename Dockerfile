@@ -16,7 +16,7 @@ RUN mkdir -p /tmp \
 
 RUN chmod 755 /bin/app/conda-env \
     && bash /bin/app/conda-env \
-    && conda install -n base pathlib -y \
+    && conda install -n base pathlib -y
 
 # Preapre app exec
 RUN chmod 755 /bin/app/flync
