@@ -19,9 +19,9 @@ if [ ! -e $workdir/assemblies/stringtie/$2'.rna.gtf' ]; then
     echo 'Done'
 fi
 wait
-if [ ! -e $workdir/assemblies/cufflinks/$2'_cuff'/transcripts.gtf ]; then
-    echo ----- CUFFLINKS TRANSCRIPTOME ASSEMBLY OF $2 -----
-    cufflinks --no-update-check -q -p $threads -o $workdir/assemblies/cufflinks/$2'_cuff' -g $appdir/genome/genome.gtf $workdir/data/$2/$2'.sorted.bam'
-    echo $workdir/assemblies/cufflinks/$2'_cuff'/transcripts.gtf >> $workdir/assemblies/cufflinks/cuffmerge.txt
-    echo 'Done'
-fi
+# if [ ! -e $workdir/assemblies/cufflinks/$2'_cuff'/transcripts.gtf ]; then
+#     echo ----- CUFFLINKS TRANSCRIPTOME ASSEMBLY OF $2 -----
+#     cufflinks --no-update-check -q -p $threads -o $workdir/assemblies/cufflinks/$2'_cuff' -g $appdir/genome/genome.gtf $workdir/data/$2/$2'.sorted.bam'
+#     echo $workdir/assemblies/cufflinks/$2'_cuff'/transcripts.gtf >> $workdir/assemblies/cufflinks/cuffmerge.txt
+#     echo 'Done'
+# fi

@@ -17,21 +17,22 @@ if [ ! -e $workdir/assemblies/stringtie/merged.gtf ]; then
    stringtie --merge $workdir/assemblies/stringtie/gtf-to-merge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/stringtie/merged.gtf
 fi
 
-cd $workdir/assemblies/cufflinks
+mv $workdir/assemblies/stringtie/merged.gtf $workdir/assemblies/merged.gtf
+# cd $workdir/assemblies/cufflinks
 
-if [ ! -e $workdir/assemblies/cufflinks/merged.gtf ]; then
-   stringtie --merge $workdir/assemblies/cufflinks/cuffmerge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/cufflinks/merged.gtf
-fi
-echo 'Done'
-cd $workdir/assemblies
+# if [ ! -e $workdir/assemblies/cufflinks/merged.gtf ]; then
+#    stringtie --merge $workdir/assemblies/cufflinks/cuffmerge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/cufflinks/merged.gtf
+# fi
+# echo 'Done'
+# cd $workdir/assemblies
 
-echo ----- MERGING STRINGTIE WITH CUFFLINKS TRANSFRAGS -----
-echo $workdir/assemblies/stringtie/merged.gtf >> $workdir/assemblies/final_merge.txt
-echo $workdir/assemblies/cufflinks/merged.gtf >> $workdir/assemblies/final_merge.txt
-if [ ! -e $workdir/assemblies/merged.gtf ]; then
-   stringtie --merge $workdir/assemblies/final_merge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/merged.gtf
-fi
-echo 'Done'
+# echo ----- MERGING STRINGTIE WITH CUFFLINKS TRANSFRAGS -----
+# echo $workdir/assemblies/stringtie/merged.gtf >> $workdir/assemblies/final_merge.txt
+# echo $workdir/assemblies/cufflinks/merged.gtf >> $workdir/assemblies/final_merge.txt
+# if [ ! -e $workdir/assemblies/merged.gtf ]; then
+#    stringtie --merge $workdir/assemblies/final_merge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/merged.gtf
+# fi
+# echo 'Done'
 
 echo ----- COMPARING ASSEMBLY TO REFERENCE -----
 mkdir -p $workdir/cuffcompare 

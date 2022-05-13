@@ -177,19 +177,29 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       conda deactivate
       ;;
     6)
-      conda activate assembleMod &>> $workdir/run.log
-      ### Extract transcript sequences from filtered .gtf file with new non-coding & coding transcripts ###
-      gffread -w $workdir/results/new-non-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-non-coding.gtf &>> $workdir/run.log
-      gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf &>> $workdir/run.log
-      conda deactivate
-
-      conda activate dgeMod &>> $workdir/run.log
+      conda activate dgeMod2
+      # ballgown for dge analysis
       if [[ -z ${metadata+x} ]]; then
           echo "Skipping DGE since no metadata file was provided..." &>> $workdir/run.log
       else
-          $appdir/scripts/dea.sh $workdir $sra $appdir $threads $metadata &>> $workdir/run.log
+          Rscript $appdir/scripts/ballgown.R $(readlink -f $workdir) $(readlink -f $metadata)
       fi
-      conda deactivate &>> $workdir/run.log
+      
+      # conda activate assembleMod &>> $workdir/run.log
+      # ### Extract transcript sequences from filtered .gtf file with new non-coding & coding transcripts ###
+      # gffread -w $workdir/results/new-non-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-non-coding.gtf &>> $workdir/run.log
+      # gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf &>> $workdir/run.log
+      # conda deactivate
+
+      # # kallisto & sleuth
+      # conda activate dgeMod &>> $workdir/run.log
+      # if [[ -z ${metadata+x} ]]; then
+      #     echo "Skipping DGE since no metadata file was provided..." &>> $workdir/run.log
+      # else
+      #     $appdir/scripts/dea.sh $workdir $sra $appdir $threads $metadata &>> $workdir/run.log
+      # fi
+      # conda deactivate &>> $workdir/run.log
+
       PIPE_STEP=7
       conda deactivate
       ;;
@@ -205,7 +215,7 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       mkdir -p $workdir/results/non-coding/features
       
       $appdir/scripts/gtf-to-bed.sh $workdir/results/new-non-coding.gtf
-      parallel --no-notice -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/get-features.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding &>> $workdir/run.log
+      parallel --no-notice -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding &>> $workdir/run.log
 
       # Write a .csv file with the filepaths for the tables to be processed in python Pandas
       ls $workdir/results/non-coding/features | grep tsv | sed 's/.tsv//g' > names.tmp
