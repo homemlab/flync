@@ -5,7 +5,8 @@ SHELL ["/bin/bash", "-c"]
 COPY . /bin/app
 
 # Required for ballgown to execute
-RUN && add-apt-repository universe \
+RUN apt-get update \
+&& add-apt-repository universe \
 && apt-get install libncurses5 \
 && mkdir -p /tmp \
 && cd /tmp \
