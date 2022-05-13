@@ -3,8 +3,6 @@
 workdir=$1
 
 cd $workdir
-cutoff=$(grep 'Cutoff' cpat/fly_cutoff.txt | sed 's@^[^0-9]*\([0-9]\+\)*@\1@')
-echo cpat cutoff is: $cutoff '('D. melanogaster - see CPAT docs')'
 
 ### Save .gtf files for each type of new transcript discovered
 grep '; class_code "u";' $workdir/cuffcompare/cuffcomp.gtf.combined.gtf > results/candidate-lincRNA.gtf
