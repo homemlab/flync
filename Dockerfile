@@ -6,7 +6,7 @@ COPY . /bin/app
 
 # Required for ballgown to execute
 RUN mkdir -p /tmp \
-&& cd ~/Downloads \
+&& cd ~/tmp \
 && wget -c wget http://ftp.debian.org/debian/pool/main/r/readline6/libreadline6_6.3-8+b3_amd64.deb \
 && wget -c http://ftp.debian.org/debian/pool/main/g/glibc/multiarch-support_2.19-18+deb8u10_amd64.deb \
 && sudo apt install ./libreadline6_6.3-8+b3_amd64.deb  ./multiarch-support_2.19-18+deb8u10_amd64.deb \
