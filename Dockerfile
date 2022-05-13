@@ -14,8 +14,9 @@ RUN mkdir -p /tmp \
 && sudo add-apt-repository universe \
 && sudo apt-get install libncurses5
 
-RUN chmod 755 /bin/app/conda-env \
-    && bash /bin/app/conda-env
+RUN conda install -n base pathlib -y \
+&& chmod 755 /bin/app/conda-env \
+&& bash /bin/app/conda-env
 
 # Preapre app exec
 RUN chmod 755 /bin/app/flync
