@@ -5,7 +5,8 @@ SHELL ["/bin/bash", "-c"]
 COPY . /bin/app
 
 # Required for ballgown to execute
-RUN apt-get install software-properties-common \
+RUN apt-get update \
+&& apt-get install software-properties-common \
 && add-apt-repository universe \
 && apt-get install libncurses5 \
 && mkdir -p /tmp \
