@@ -11,7 +11,7 @@ echo ----- MERGING TRANSCRIPTOME ASSEMBLIES -----
 
 cd $workdir/assemblies/stringtie
 
-ls | grep '.rna.gtf$' | perl -ne 'print "$workdir$_"' > gtf-to-merge.txt
+ls ${PWD}/*.rna.gtf > gtf-to-merge.txt
 
 if [ ! -e $workdir/assemblies/stringtie/merged.gtf ]; then   
    stringtie --merge $workdir/assemblies/stringtie/gtf-to-merge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/stringtie/merged.gtf

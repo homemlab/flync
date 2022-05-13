@@ -13,17 +13,16 @@ sd=${sd%.*}
 cd $workdir
 
 ### Download and map reads from SRA accession numbers in .txt file ###
-mkdir -p data 
 mkdir -p data/$2 
 echo ----- DOWNLOADING READS $2 -----
 if [[ ! -e data/$2/*.fastq.gz ]] || [[ ! -e data/$2/*1.fastq.gz ]] || [[ ! -e data/$2/*2.fastq.gz ]]; then
     ## Faster:
-    #fasterq-dump -f -3 -p -e $threads -O $workdir/data/$2 $2
-    #if ! [ -e data/$2/*.fastq.gz ]; then
-    #    gzip $workdir/data/$2/*.fastq
-    #fi
+    fasterq-dump -f -3 -p -e $threads -O $workdir/data/$2 $2 &>> $workdir/run.log
+    if ! [ -e data/$2/*.fastq.gz ]; then
+       gzip $workdir/data/$2/*.fastq 
+    fi
 	## Even faster:
-	parallel-fastq-dump --tmpdir . --threads $threads --gzip --split-files --sra-id $2 --outdir $workdir/data/$2
+	#parallel-fastq-dump --tmpdir . --threads $threads --gzip --split-files --sra-id $2 --outdir $workdir/data/$2
 fi    
 echo 'Done'
 wait

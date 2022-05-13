@@ -24,6 +24,8 @@ touch "$workdir"/run.log
 ## DEFINE THREADS FOR RUUNING PIPELINE ##
 jobs=$(wc -l $sra | cut -f1 -d' ')
 
+echo 'Threads available: ' $threads &>> $workdir/run.log
+
 echo 'Number of samples for this run: ' $jobs &>> $workdir/run.log
 if [[ $threads -ge $jobs ]]; then
     downstream_threads=$(expr $threads / $jobs)
@@ -32,7 +34,6 @@ else
     jobs=$threads
     downstream_threads=1
 fi
-echo 'Maximum samples running in parallel: ' $threads &>> $workdir/run.log
 echo 'Number of threads per running sample: ' $downstream_threads &>> $workdir/run.log
 
 
@@ -151,30 +152,36 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
     2)
       $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
       PIPE_STEP=3
+      conda deactivate
       ;;
     3)
       conda activate mapMod &>> $workdir/run.log
       $appdir/scripts/build-index.sh $appdir $threads &>> $workdir/run.log
       parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
       PIPE_STEP=4
+      conda deactivate
       ;;
     4)
       conda activate assembleMod &>> $workdir/run.log
       parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
       $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &>> $workdir/run.log
+      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
       PIPE_STEP=5
+      conda deactivate
       ;;
     5)
       conda activate codMod &>> $workdir/run.log
       $appdir/scripts/coding-prob.sh $workdir $appdir $threads &>> $workdir/run.log
       $appdir/scripts/class-new-transfrags.sh $workdir $threads $appdir &>> $workdir/run.log
       PIPE_STEP=6
+      conda deactivate
       ;;
     6)
       conda activate assembleMod &>> $workdir/run.log
       ### Extract transcript sequences from filtered .gtf file with new non-coding & coding transcripts ###
       gffread -w $workdir/results/new-non-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-non-coding.gtf &>> $workdir/run.log
       gffread -w $workdir/results/new-coding-transcripts.fa -g $appdir/genome/genome.fa $workdir/results/new-coding.gtf &>> $workdir/run.log
+      conda deactivate
 
       conda activate dgeMod &>> $workdir/run.log
       if [[ -z ${metadata+x} ]]; then
@@ -184,14 +191,21 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       fi
       conda deactivate &>> $workdir/run.log
       PIPE_STEP=7
+      conda deactivate
       ;;
     7)
+      conda activate infoMod
+      cd $workdir/results
+      $appdir/scripts/gtf-to-bed.sh new-non-coding.gtf
+      conda deactivate
+
+      cd $workdir
       conda activate featureMod
       
       mkdir -p $workdir/results/non-coding/features
       
       $appdir/scripts/gtf-to-bed.sh $workdir/results/new-non-coding.gtf
-      parallel --no-notice -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/get-features.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding
+      parallel --no-notice -k --lb -j $threads -a $appdir/static/tracksFile.tsv $appdir/get-features.sh {} $workdir/results/new-non-coding.chr.bed $workdir/results/non-coding &>> $workdir/run.log
 
       # Write a .csv file with the filepaths for the tables to be processed in python Pandas
       ls $workdir/results/non-coding/features | grep tsv | sed 's/.tsv//g' > names.tmp
