@@ -39,3 +39,15 @@ results_transcripts <- data.frame(geneNames = geneNames(bg_obj_filt),
 
 # write final table
 write.csv(results_transcripts, "results/dge.csv", row.names = FALSE)
+
+# get transcript-level FPKM values and coordenates
+texpr <- texpr(bg_obj_filt, meas = "all")
+
+# add mean and sd columns
+texpr$mean.FPKM <- rowMeans(texpr[ , grepl("FPKM", names(texpr))])
+texpr$sd.FPKM <- apply(texpr[ , grepl("FPKM", names(texpr))], 1, sd)
+texpr$mean.cov <- rowMeans(texpr[ , grepl("cov", names(texpr))])
+texpr$sd.cov <- apply(texpr[ , grepl("cov", names(texpr))], 1, sd)
+
+
+write.csv(texpr, "results/trans_expr.csv", row.names = FALSE)

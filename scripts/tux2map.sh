@@ -17,7 +17,11 @@ mkdir -p data/$2
 echo ----- DOWNLOADING READS $2 -----
 if [[ ! -e data/$2/*.fastq.gz ]] || [[ ! -e data/$2/*1.fastq.gz ]] || [[ ! -e data/$2/*2.fastq.gz ]]; then
     ## Faster:
-    fasterq-dump -f -3 -p -e $threads -O $workdir/data/$2 $2 &>> $workdir/run.log
+    cd $workdir
+    prefetch -O $workdir/data/$2 $2 &>> $workdir/run.log
+    wait
+    cd $workdir/data/$2
+    fasterq-dump -f -3 -e $threads -O $workdir/data/$2 $2 &>> $workdir/run.log
     if ! [ -e data/$2/*.fastq.gz ]; then
        gzip $workdir/data/$2/*.fastq 
     fi
@@ -25,6 +29,7 @@ if [[ ! -e data/$2/*.fastq.gz ]] || [[ ! -e data/$2/*1.fastq.gz ]] || [[ ! -e da
 	#parallel-fastq-dump --tmpdir . --threads $threads --gzip --split-files --sra-id $2 --outdir $workdir/data/$2
 fi    
 echo 'Done'
+cd $workdir
 wait
 echo ----- MAPPING READS $2 -----
 if [ ! -e data/$2/*.sorted.bam ] && [ ! -e data/$2/*.bam ] && [ ! -e data/$2/*.sam ]; then
@@ -46,7 +51,7 @@ fi
 echo 'Done'
 wait
 echo ----- REMOVING OBSOLETE READ FILES -----
-#rm -rf $workdir/data/$2/$2'.fastq.gz'
+rm -rf $workdir/data/$2/$2'.fastq.gz'
 rm -rf $workdir/data/$2/$2'.sam'
 rm -rf $workdir/data/$2/$2'.bam'
 echo 'Done'
