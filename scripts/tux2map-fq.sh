@@ -7,7 +7,7 @@ appdir=$4
 lay=${5^^}
 samthr=$(expr $threads / 2)
 
-### FILE NAMES AND EXTENSIONS NOT WORKING... 
+### FILE NAMES AND EXTENSIONS NOT WORKING...
 
 fullfile=$(basename -- "$fq")
 filename="${fullfile%.*}"
