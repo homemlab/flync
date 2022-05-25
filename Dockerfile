@@ -1,5 +1,7 @@
 FROM continuumio/miniconda3:latest
 
+ENV TERM=xterm-256color
+
 SHELL ["/bin/bash", "-c"]
 
 COPY . /bin/app

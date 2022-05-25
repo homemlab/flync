@@ -9,8 +9,10 @@ metadata=$5
 
 if [[ -z ${bed+x} ]]; then
   bed=$workdir/results/new-non-coding.chr.bed
+  USER_PREDICT=0
 else
   bed=$(readlink -f $6) &>> $workdir/run.log
+  USER_PREDICT=1
   PIPE_STEP=7
 fi
 
@@ -198,6 +200,7 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       ;;
     7)
       conda activate infoMod
+      mkdir -p $workdir/results
       cd $workdir/results
       $appdir/scripts/gtf-to-bed.sh new-non-coding.gtf &>> $workdir/run.log
       conda deactivate
@@ -225,8 +228,15 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
 
       conda activate predictMod
 
-      python3 $appdir/scripts/feature-table-2vs.py $appdir $workdir $bed
+      python3 $appdir/scripts/feature-table-2vs.py $appdir $workdir $bed &>> $workdir/run.log
 
+      if [[ $USER_PREDICT = 0 ]]; then
+        python3 $appdir/scripts/predict.py $appdir $workdir &>> $workdir/run.log
+        python3 $appdir/scripts/final-table.py $appdir $workdir $bed &>> $workdir/run.log
+      else
+        python3 $appdir/scripts/predict.py $appdir $workdir "$(basename $bed | awk -F'[.]' '{print$1}')" &>> $workdir/run.log
+      fi
+      
       PIPE_STEP=0
       ;;
   esac

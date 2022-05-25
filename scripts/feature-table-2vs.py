@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ workdir=Path(sys.argv[2])
 paths_table=workdir/'results/non-coding/features/paths.csv'
 outpath=workdir/'results/'
 
-if len(sys.argv) < 3:
+if len(sys.argv) < 4:
     bed_path=workdir/'results/new-non-coding.bed'
 else:
     bed_path=Path(sys.argv[3])

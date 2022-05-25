@@ -88,50 +88,34 @@ sra.add_argument(
 )
 
 sra.add_argument(
-    '--split',
-    '-s',
-    metavar='<STR>',
-    action='store',
-    type=str,
-    default='full',
-    help=f'''Split mode: Run specific parts of the analysis pipeline. Available options are:
-    [full] : Preform the main pipeline: Read alignment, Transcriptome assembly, Coding probability & Transcript scoring and classification.
-    [map] : Only download (if -l is provided) and map reads to the reference genome.
-    [map-stats] : Perform the analysis of the mapping statistics and prepares files for assembly step.
-    [assembly] : Perform assembly step and coding probability assessment. Also outputs final results.
-    [dge] : Perform the whole pipeline plus a pseudoalignment with Differential Gene Expression analysis considering the newly discovered transcripts.
-    [clean] : Intended to remove unnecessary files after complete run. Will delete data/ and assemblies/ folder.'''
-)
-
-sra.add_argument(
     '--metadata',
     '-m',
     metavar='<FILE>',
     action='store',
     type=lambda p: Path(p).resolve(),
     default=appdir / 'test' / 'metadata.csv',
-    help=f'{bcolors.RED2}(MANDATORY if -s dge).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
+    help=f'{bcolors.RED2}(MANDATORY for Diff. Expr. Analysis).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
 )
 
-sra.add_argument(
-    '--genome',
-    '-g',
-    metavar='<FILE>',
-    action='store',
-    type=lambda p: Path(p).resolve(),
-    default=appdir / 'genome' / 'genome.fa',
-    help='File in .fa format of the genome sequence to be used. If not provided, will download and use ' + genome_release
-)
+# sra.add_argument(
+#     '--genome',
+#     '-g',
+#     metavar='<FILE>',
+#     action='store',
+#     type=lambda p: Path(p).resolve(),
+#     default=appdir / 'genome' / 'genome.fa',
+#     help='File in .fa format of the genome sequence to be used. If not provided, will download and use ' + genome_release
+# )
 
-sra.add_argument(
-    '--annotation',
-    '-a',
-    metavar='<FILE>',
-    action='store',
-    type=lambda p: Path(p).resolve(),
-    default=appdir / 'genome' / 'genome.gtf',
-    help='File in .gtf format of the genome annotation to be used. If not provided, will download and use ' + genome_release
-)
+# sra.add_argument(
+#     '--annotation',
+#     '-a',
+#     metavar='<FILE>',
+#     action='store',
+#     type=lambda p: Path(p).resolve(),
+#     default=appdir / 'genome' / 'genome.gtf',
+#     help='File in .gtf format of the genome annotation to be used. If not provided, will download and use ' + genome_release
+# )
 
 sra.add_argument(
     '--threads',
@@ -143,15 +127,15 @@ sra.add_argument(
     help='Number of threads to use during execution (default = 2).'
 )
 
-sra.add_argument(
-    '--quality',
-    '-q',
-    metavar='<INT>',
-    action='store',
-    type=int,
-    default=50,
-    help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
-)
+# sra.add_argument(
+#     '--quality',
+#     '-q',
+#     metavar='<INT>',
+#     action='store',
+#     type=int,
+#     default=50,
+#     help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
+# )
 
 ### FASTQ PIPELINE ARGUMENTS ###
 fastq = subparsers.add_parser('fastq', help='Run full pipeline by providing a local <dir> containing the <fastq.gz> files to be used as input.', formatter_class=RawTextHelpFormatter)
@@ -189,21 +173,21 @@ fastq.add_argument(
     help='Set to <true> (1) or <false> (0) if provided reads are paired-end or not. If false or unset will assume unpaired reads.'
 )
 
-fastq.add_argument(
-    '--split',
-    '-s',
-    metavar='<STR>',
-    action='store',
-    type=str,
-    default='full',
-    help=f'''Split mode: Run specific parts of the analysis pipeline. Available options are:
-    [full] : Preform the main pipeline: Read alignment, Transcriptome assembly, Coding probability & Transcript scoring and classification.
-    [map] : Only download (if -l is provided) and map reads to the reference genome.
-    [map-stats] : Perform the analysis of the mapping statistics and prepares files for assembly step.
-    [assembly] : Perform assembly step and coding probability assessment. Also outputs final results.
-    [dge] : Perform the whole pipeline plus a pseudoalignment with Differential Gene Expression analysis considering the newly discovered transcripts.
-    [clean] : Intended to remove unnecessary files after complete run. Will delete data/ and assemblies/ folder.'''
-)
+# fastq.add_argument(
+#     '--split',
+#     '-s',
+#     metavar='<STR>',
+#     action='store',
+#     type=str,
+#     default='full',
+#     help=f'''Split mode: Run specific parts of the analysis pipeline. Available options are:
+#     [full] : Preform the main pipeline: Read alignment, Transcriptome assembly, Coding probability & Transcript scoring and classification.
+#     [map] : Only download (if -l is provided) and map reads to the reference genome.
+#     [map-stats] : Perform the analysis of the mapping statistics and prepares files for assembly step.
+#     [assembly] : Perform assembly step and coding probability assessment. Also outputs final results.
+#     [dge] : Perform the whole pipeline plus a pseudoalignment with Differential Gene Expression analysis considering the newly discovered transcripts.
+#     [clean] : Intended to remove unnecessary files after complete run. Will delete data/ and assemblies/ folder.'''
+# )
 
 fastq.add_argument(
     '--metadata',
@@ -212,28 +196,28 @@ fastq.add_argument(
     action='store',
     type=lambda p: Path(p).resolve(),
     default=appdir / 'test' / 'metadata.csv',
-    help=f'{bcolors.RED2}(MANDATORY if -s dge).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
+    help=f'{bcolors.RED2}(MANDATORY for Diff. Expr. Analysis).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
 )
 
-fastq.add_argument(
-    '--genome',
-    '-g',
-    metavar='<FILE>',
-    action='store',
-    type=lambda p: Path(p).resolve(),
-    default=appdir / 'genome' / 'genome.fa',
-    help='File in .fa format of the genome sequence to be used. If not provided, will download and use ' + genome_release
-)
+# fastq.add_argument(
+#     '--genome',
+#     '-g',
+#     metavar='<FILE>',
+#     action='store',
+#     type=lambda p: Path(p).resolve(),
+#     default=appdir / 'genome' / 'genome.fa',
+#     help='File in .fa format of the genome sequence to be used. If not provided, will download and use ' + genome_release
+# )
 
-fastq.add_argument(
-    '--annotation',
-    '-a',
-    metavar='<FILE>',
-    action='store',
-    type=lambda p: Path(p).resolve(),
-    default=appdir / 'genome' / 'genome.gtf',
-    help='File in .gtf format of the genome annotation to be used. If not provided, will download and use ' + genome_release
-)
+# fastq.add_argument(
+#     '--annotation',
+#     '-a',
+#     metavar='<FILE>',
+#     action='store',
+#     type=lambda p: Path(p).resolve(),
+#     default=appdir / 'genome' / 'genome.gtf',
+#     help='File in .gtf format of the genome annotation to be used. If not provided, will download and use ' + genome_release
+# )
 
 fastq.add_argument(
     '--threads',
@@ -245,15 +229,15 @@ fastq.add_argument(
     help='Number of threads to use during execution (default = 2).'
 )
 
-fastq.add_argument(
-    '--quality',
-    '-q',
-    metavar='<INT>',
-    action='store',
-    type=int,
-    default=50,
-    help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
-)
+# fastq.add_argument(
+#     '--quality',
+#     '-q',
+#     metavar='<INT>',
+#     action='store',
+#     type=int,
+#     default=50,
+#     help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
+# )
 
 args = parser.parse_args()
 
