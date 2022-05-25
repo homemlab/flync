@@ -1,7 +1,6 @@
 .dockerignore
 genome/
 .vscode/
-model/*.sav
 run_L3vs48hP/
 3dA/
 wtVSbrat_mock/
