@@ -3,7 +3,7 @@
 appdir=$1
 threads=$2
 cd $appdir
-mkdir genome >&2 $workdir/err.log
+mkdir -p genome 
 cd genome
 export HISAT2_INDEXES=$appdir/genome/
 
@@ -17,7 +17,7 @@ then
     hisat2-build -p $threads $appdir/genome/genome.fa genome.idx 2> idx.err.txt 1> idx.out.txt
     echo 'Done'
 
-    echo ----- EXTRACTING SPLICE JUNCTIONS -----
-    hisat2_extract_splice_sites.py $appdir/genome/genome.gtf > genome.sj
+    echo ----- EXTRACTING SPLICE JUNCTIONS AND EXONS -----
+    hisat2_extract_splice_sites.py $appdir/genome/genome.gtf > genome.ss
     echo 'Done'
 fi
