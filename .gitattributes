@@ -1,4 +1,4 @@
-*.sav filter=lfs diff=lfs merge=lfs -text
 lncrna/*.2s linguist-documentation
 not_lncrna/*.2s linguist-documentation
 scripts/* linguist-detectable
+
