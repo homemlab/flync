@@ -160,6 +160,7 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       PIPE_STEP=2
       ;;
     2)
+      mkdir -p $workdir/results
       $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
       PIPE_STEP=3
       conda deactivate
@@ -214,7 +215,7 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       jobs2=$(cat $appdir/static/tracksFile.tsv | wc -l)
       downstream_threads=$(expr $threads / $jobs2)
       downstream_threads=${downstream_threads%.*}
-      parallel --no-notice -k --lb -j $jobs2 -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features-2vs.sh {} $bed $workdir/results/non-coding $downstream_threads &>> $workdir/run.log
+      parallel --no-notice -k --lb -j $jobs2 -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $bed $workdir/results/non-coding $downstream_threads &>> $workdir/run.log
 
       # Write a .csv file with the filepaths for the tables to be processed in python Pandas
       ls $workdir/results/non-coding/features | grep tsv | sed 's/.tsv//g' > names.tmp
@@ -228,7 +229,7 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
 
       conda activate predictMod
 
-      python3 $appdir/scripts/feature-table-2vs.py $appdir $workdir $bed &>> $workdir/run.log
+      python3 $appdir/scripts/feature-table.py $appdir $workdir $bed &>> $workdir/run.log
 
       if [[ $USER_PREDICT = 0 ]]; then
         python3 $appdir/scripts/predict.py $appdir $workdir &>> $workdir/run.log
