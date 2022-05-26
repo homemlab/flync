@@ -9,7 +9,7 @@ from pathlib import Path
 appdir=Path(sys.argv[1])
 workdir=Path(sys.argv[2])
 outpath=workdir/'results'
-model_path=appdir/'model'/'rf_dm6_lncrna_classifier.sav'
+model_path=appdir/'model'/'rf_dm6_lncrna_classifier.model'
 
 if len(sys.argv) < 4:
     predict_table=outpath/'new-non-coding.csv'
