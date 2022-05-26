@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ## Prepare BED files for getting feature tables for ML-training and testing
 
