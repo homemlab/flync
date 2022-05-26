@@ -3,14 +3,14 @@ name: Build and publish Docker image
 on:
   push:
     branches:
-      # - 'main'
-      - 'fastq'
+      - 'main'
+      - 'master'
     tags:
       - v*
   pull_request:
     branches:
-      # - 'main'
-      - 'fastq'
+      - 'main'
+      - 'master'
     tags:
       - v*
 
