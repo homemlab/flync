@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 workdir=$(readlink -f $1)
 fq=$2

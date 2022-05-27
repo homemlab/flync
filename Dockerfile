@@ -19,4 +19,4 @@ ENV PATH=${PATH}:/bin/app
 
 WORKDIR /bin/app
 
-CMD ["python3", "flync", "--help"]
+CMD ["flync", "--help"]

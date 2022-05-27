@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 appdir=$1
 cd $appdir
