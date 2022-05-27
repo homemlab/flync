@@ -35,11 +35,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          flavor: latest=auto
+          flavor: latest=true
           images: rfcdsantos/flync
           tags: |
             type=raw,value=${{ env.BRANCH }},suffix={{date 'YYYYMMDD'}}
-            type=edge
             type=ref,event=branch
             type=ref,event=tag
             type=ref,event=pr
