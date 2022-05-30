@@ -6,8 +6,6 @@ SHELL ["/bin/bash", "-c"]
 
 COPY . /bin/app
 
-# Need to fix ballgown dependencies
-
 RUN conda install -n base pathlib \
     && chmod 755 /bin/app/conda-env \
     && bash /bin/app/conda-env

@@ -13,4 +13,4 @@ if [ ! -e $workdir/cov/$sra'.rna.gtf' ]; then
     echo 'Done'
 fi
 
-ls -d ${PWD}/cov/*/ >> $workdir/cov/ballgown_paths.txt
+

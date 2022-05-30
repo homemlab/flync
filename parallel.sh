@@ -177,15 +177,14 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
       $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &>> $workdir/run.log
       parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
+      cd $workdir
+      ls -d ${PWD}/cov/*/ >> $workdir/cov/ballgown_paths.txt
       PIPE_STEP=5
       conda deactivate
       ;;
     5)
       conda activate codMod &>> $workdir/run.log
       $appdir/scripts/coding-prob.sh $workdir $appdir $threads &>> $workdir/run.log
-      cp $workdir/run.log $workdir/run.log2
-      grep -v "sequences finished" $workdir/run.log2 > $workdir/run.log
-      rm $workdir/run.log2
       $appdir/scripts/class-new-transfrags.sh $workdir $threads $appdir &>> $workdir/run.log
       PIPE_STEP=6
       conda deactivate
