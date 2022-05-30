@@ -6,8 +6,7 @@ SHELL ["/bin/bash", "-c"]
 
 COPY . /bin/app
 
-RUN conda install -n base pathlib \
-    && chmod 755 /bin/app/conda-env \
+RUN chmod 755 /bin/app/conda-env \
     && bash /bin/app/conda-env
 
 # Preapre app exec
