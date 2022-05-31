@@ -2,34 +2,22 @@
 
 # Mandatory arguments
 # (-o) Set path to output dir
-output: /path/to/output/
+output: ./test_run
 # This is equivalent to the -f option of the CLI
 # If set to false the software will expect an SRA accesion list as input isntead
 # If set to true will expect directory with .fastq.gz reads and if reads are paired-end.
-fastq:
-  active: true
-  path: /path/to/fastq
-  paired: true # If false or unset will assume single-end
+fastq_active: false
+fastq_path: /path/to/fastq
+fastq_paired: true # If false or unset will assume single-end
   # (-l) If fastq_mode: false then provide path to SRA list
-  sra: /path/to/sra
+sra: ./test/test-list.txt
+metadata: ./test/metadata.csv
 
-# Optional arguments
-# Name your run, the final files will use this as prefix
-name: test_run
-# (-s) Split the pipeline into steps (useful for limited computational power, allows to segment run)
-# If set to true expects "split_step" to be set to one of the following
-# Accepts the following strings: map, map-stats, assembly, kall, clean
-split:
-  active: false
-  step:
-  # (-c) If step chosen is kall, provide the metadata.csv file in metadata
-  metadata: /path/to/metadata.csv
-# (-g AND -a) For user provider reference genome
-genome:
-  active: true
-  sequence: /path/to/genome.fa
-  annotation: /path/to/genome.gtf
-# (-m) Cutoff to apply to percentage of reads mapped to the reference genome (-m option)
-map_cutoff: 50
 # (-t) Number of threads to use in this run (default is 2 if unset)
 threads: 2
+
+# Optional arguments
+# (-g AND -a) For user provider reference genome
+genome_active: true
+genome_sequence: /path/to/genome.fa
+genome_annotation: /path/to/genome.gtf

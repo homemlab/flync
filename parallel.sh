@@ -1,24 +1,5 @@
 #!/usr/bin/env bash
 
-## VARIABLES ##
-workdir=$1
-sra=$2
-threads=$3
-appdir=$4
-metadata=$5
-
-if [[ -z ${bed+x} ]]; then
-  bed=$workdir/results/new-non-coding.chr.bed
-  USER_PREDICT=0
-else
-  bed=$(readlink -f $6) &>> $workdir/run.log
-  USER_PREDICT=1
-  PIPE_STEP=7
-fi
-
-#genome=$(readlink -f $6)
-#annot=$(readlink -f $7)
-
 ## COLORS ##
 BOLD='\033[1m'
 RED='\033[1;31m'
@@ -28,11 +9,49 @@ CYAN='\033[0;36m'
 PURPLE='\033[1;35m'
 NC='\033[0m'
 
+## VARIABLES ##
+workdir=$1
+
 mkdir -p $workdir
 touch "$workdir"/run.log
 
+sra=$2
+threads=$3
+appdir=$4
+metadata=$5
+paired=$6
+echo $paired
+
+if [[ $paired == '' ]]; then
+  echo -e "!!!WARNING!!! Read layout is unset by user, this is required if providing .fastq.gz files instead of SRA accessions" >> $workdir/run.log
+  jobs=$(cat $sra | wc -l)
+else
+  fastq=1
+  if [[ $paired == 'True' || $paired == 'TRUE' || $paired == 1 ]]; then
+    layout=PAIRED
+    fq_files=$(ls $sra'/*_1.fastq.gz')
+    jobs=$(ls $sra'/*_1.fastq.gz' | wc -l)
+  else
+    fq_files=$(ls $sra'/*.fastq.gz')
+    layout=SINGLE
+    jobs=$(ls $sra'/*.fastq.gz' | wc -l)
+  fi
+  echo "GREP THIS: $fq_files"
+fi
+
+if [[ -z ${bed+x} ]]; then
+  bed=$workdir/results/new-non-coding.chr.bed
+  USER_PREDICT=0
+else
+  bed=$(readlink -f $7) &>> $workdir/run.log
+  USER_PREDICT=1
+  PIPE_STEP=7
+fi
+
+#genome=$(readlink -f $8)
+#annot=$(readlink -f $9)
+
 ## DEFINE THREADS FOR RUUNING PIPELINE ##
-jobs=$(wc -l $sra | cut -f1 -d' ')
 
 echo 'Threads available: ' $threads &>> $workdir/run.log
 
@@ -168,7 +187,12 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
     3)
       conda activate mapMod &>> $workdir/run.log
       $appdir/scripts/build-index.sh $appdir $threads &>> $workdir/run.log
-      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
+
+      if [[ $fastq == 1 ]]; then
+        parallel -k --lb -j $jobs -a $fq_files $appdir/scripts/tux2map-fq.sh $workdir {} $downstream_threads $appdir $layout &>> $workdir/run.log
+      else
+        parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
+      fi
       PIPE_STEP=4
       conda deactivate
       ;;
