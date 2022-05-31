@@ -2,7 +2,7 @@
 
 # Mandatory arguments
 # (-o) Set path to output dir
-output: test_run
+output: /data/test_run
 # This is equivalent to the -f option of the CLI
 # If set to false the software will expect an SRA accesion list as input isntead
 # If set to true will expect directory with .fastq.gz reads and if reads are paired-end.
@@ -18,6 +18,6 @@ threads: 2
 
 # Optional arguments
 # (-g AND -a) For user provider reference genome
-genome_active: true
+genome_active: false
 genome_sequence: /path/to/genome.fa
 genome_annotation: /path/to/genome.gtf
