@@ -270,55 +270,55 @@ Contact: {__mail__}
 ''')
 
 # PARSE YAML CONFIG FILE
-with open(Path(args.config), "r") as yaml_file:
-    try:
-        parsed_yaml = yaml.safe_load(yaml_file)
-    except yaml.YAMLError as exc:
-        print(exc)
 
-if parsed_yaml['fastq_active']:
-    # Run the fastq pipeline
-    test_output = Path(parsed_yaml['output']).absolute().as_posix()
-    if test_output != '':
-        yaml_output = test_output
-    
-    yaml_fastq_path = Path(parsed_yaml['fastq_path']).absolute().as_posix()
-    yaml_fastq_paired = parsed_yaml['fastq_paired']
-    yaml_metadata = Path(parsed_yaml['metadata']).absolute().as_posix()
-    yaml_threads = str(parsed_yaml['threads'])
-    
-    test_genome = parsed_yaml['genome_active']
-    if test_genome:
-        yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
-        yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
-# Call parallel.sh with the parsed arguments
-    if args.subcommand == 'run':
+if args.subcommand == 'run':
+    with open(Path(args.config), "r") as yaml_file:
+        try:
+            parsed_yaml = yaml.safe_load(yaml_file)
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    if parsed_yaml['fastq_active']:
+        # Run the fastq pipeline
+        test_output = Path(parsed_yaml['output']).absolute().as_posix()
+        if test_output != '':
+            yaml_output = test_output
+        
+        yaml_fastq_path = Path(parsed_yaml['fastq_path']).absolute().as_posix()
+        yaml_fastq_paired = parsed_yaml['fastq_paired']
+        yaml_metadata = Path(parsed_yaml['metadata']).absolute().as_posix()
+        yaml_threads = str(parsed_yaml['threads'])
+        
+        test_genome = parsed_yaml['genome_active']
+        if test_genome:
+            yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
+            yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
+    # Call parallel.sh with the parsed arguments
         cmd=[appdir.as_posix() + '/parallel.sh', yaml_output, yaml_fastq_path, str(yaml_threads), appdir.as_posix(), yaml_metadata, yaml_fastq_paired]
         main(cmd)
-else:
-    # Run the sra pipeline
-    test_output = Path(parsed_yaml['output']).absolute().as_posix()
-    if test_output != '':
-        yaml_output = test_output
+    else:
+        # Run the sra pipeline
+        test_output = Path(parsed_yaml['output']).absolute().as_posix()
+        if test_output != '':
+            yaml_output = test_output
 
-    if Path(parsed_yaml['sra']).is_file() == False:
-        raise FileNotFoundError(Path(parsed_yaml['sra']).absolute())
+        if Path(parsed_yaml['sra']).is_file() == False:
+            raise FileNotFoundError(Path(parsed_yaml['sra']).absolute())
 
-    yaml_sra = Path(parsed_yaml['sra']).absolute().as_posix()
-    yaml_metadata = Path(parsed_yaml['metadata']).absolute().as_posix()
-    yaml_threads = str(parsed_yaml['threads'])
+        yaml_sra = Path(parsed_yaml['sra']).absolute().as_posix()
+        yaml_metadata = Path(parsed_yaml['metadata']).absolute().as_posix()
+        yaml_threads = str(parsed_yaml['threads'])
 
-    test_genome = parsed_yaml['genome_active']
-    if test_genome:
-        yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
-        yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
-# Call parallel.sh with the parsed arguments
-    if args.subcommand == 'run':
+        test_genome = parsed_yaml['genome_active']
+        if test_genome:
+            yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
+            yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
+    # Call parallel.sh with the parsed arguments
         cmd=[appdir.as_posix() + '/parallel.sh', yaml_output, yaml_sra, str(yaml_threads), appdir.as_posix(), yaml_metadata]
         main(cmd)
 
 if args.subcommand == 'sra':
-    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix(), args.metadata.as_posix()]
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix(), args.metadata]
     main(cmd)
 
 elif args.subcommand == 'fastq':
