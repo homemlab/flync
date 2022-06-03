@@ -1,6 +1,4 @@
-FROM rfcdsantos/flync:base-with-envs
-
-COPY . /bin/app
+FROM rfcdsantos/flync:local-tracks
 
 RUN chmod 755 /bin/app/flync
 

@@ -1,6 +1,5 @@
 .dockerignore
 genome/
 .vscode/
-run_L3vs48hP/
-3dA/
-wtVSbrat_mock
+*.bb
+*.bw
