@@ -1,4 +1,4 @@
-FROM rfcdsantos/flync:local-tracks
+FROM rfcdsantos/flync:base-with-envs
 
 COPY . /bin/app
 
