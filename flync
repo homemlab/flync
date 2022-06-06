@@ -13,7 +13,7 @@ import yaml
 # HARD CODED VARS
 __author__ = 'Ricardo F. dos Santos'
 __mail__ = '<ricardo.santos@nms.unl.pt>'
-__version__ = '1.3'
+__version__ = '1.5.9'
 appdir = Path(__file__).resolve().parent
 genome_release = 'Ensembl BDGP6.32 release'
 
@@ -238,8 +238,6 @@ fastq.add_argument(
 # )
 
 args = parser.parse_args()
-
-print(args)
 
 def main(cmd_string):
     subprocess.Popen(cmd_string,
