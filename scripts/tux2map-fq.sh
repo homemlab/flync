@@ -6,6 +6,9 @@ threads=$3
 appdir=$4
 lay=${5^^}
 samthr=$(expr $threads / 2)
+if [[ $samthr < 1 ]]; then
+    samthr=1
+fi
 
 ### FILE NAMES AND EXTENSIONS NOT WORKING...
 

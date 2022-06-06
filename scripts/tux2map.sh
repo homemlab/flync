@@ -5,6 +5,9 @@ sra=$2
 threads=$3
 appdir=$4
 samthr=$(expr $threads / 2)
+if [[ $samthr < 1 ]]; then
+    samthr=1
+fi
 readlen=$(grep $2 $workdir/results/runinfo.csv | cut -f2 -d,)
 sd=$(bc -l <<< 'scale=2; '$readlen'*0.1*2')
 sd=${sd%.*}

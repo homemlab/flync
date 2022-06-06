@@ -168,7 +168,7 @@ fastq.add_argument(
     '-p',
     metavar='<BOOL>',
     action='store',
-    type=bool,
+    type=str,
     default=False,
     help='Set to <true> (1) or <false> (0) if provided reads are paired-end or not. If false or unset will assume unpaired reads.'
 )
@@ -240,6 +240,8 @@ fastq.add_argument(
 # )
 
 args = parser.parse_args()
+
+print(args)
 
 def main(cmd_string):
     subprocess.Popen(cmd_string,
@@ -322,5 +324,5 @@ if args.subcommand == 'sra':
     main(cmd)
 
 elif args.subcommand == 'fastq':
-    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix()]
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.fastq, str(args.threads), appdir.as_posix(), args.metadata, str(args.paired)]
     main(cmd)

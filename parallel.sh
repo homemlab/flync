@@ -20,21 +20,24 @@ threads=$3
 appdir=$4
 metadata=$5
 paired=$6
-echo $paired
+
 
 if [[ $paired == '' ]]; then
   echo -e "!!!WARNING!!! Read layout is unset by user, this is required if providing .fastq.gz files instead of SRA accessions" >> $workdir/run.log
   jobs=$(cat $sra | wc -l)
 else
   fastq=1
-  if [[ $paired == 'True' || $paired == 'TRUE' || $paired == 1 ]]; then
+  if [[ $paired == 'True' || $paired == 'TRUE' || $paired == 'true' || $paired == 1 ]]; then
     layout=PAIRED
     fq_files=$(ls $sra'/*_1.fastq.gz')
     jobs=$(ls $sra'/*_1.fastq.gz' | wc -l)
-  else
+  elif [[ $paired == 'False' || $paired == 'FALSE' || $paired == 'false' || $paired == 0 ]]; then
     fq_files=$(ls $sra'/*.fastq.gz')
     layout=SINGLE
     jobs=$(ls $sra'/*.fastq.gz' | wc -l)
+  else
+    echo "Paresed argument for -p/--paired is invalid. Please choose <True>/<False>"
+    exit 2
   fi
   echo "GREP THIS: $fq_files"
 fi
@@ -233,14 +236,22 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       conda deactivate
 
       cd $workdir
-      conda activate featureMod
+      conda activate mapMod
       
       mkdir -p $workdir/results/non-coding/features
       
       # Got 24% faster by parallelizing the get-features.sh script
       jobs2=$(cat $appdir/static/tracksFile.tsv | wc -l)
-      downstream_threads=$(expr $threads / $jobs2)
+      downstream_threads=$(bc -l <<< 'scale=2; '$threads'/'$jobs2'')
       downstream_threads=${downstream_threads%.*}
+      if [[ $downstream_threads < 1 ]]; then
+        downstream_threads=1
+      fi
+      
+      conda deactivate
+
+      conda activate featureMod
+
       parallel --no-notice -k --lb -j $jobs2 -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $bed $workdir/results/non-coding $downstream_threads &>> $workdir/run.log
 
       # Write a .csv file with the filepaths for the tables to be processed in python Pandas
