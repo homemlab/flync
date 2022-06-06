@@ -29,17 +29,16 @@ else
   fastq=1
   if [[ $paired == 'True' || $paired == 'TRUE' || $paired == 'true' || $paired == 1 ]]; then
     layout=PAIRED
-    fq_files=$(ls $sra'/*_1.fastq.gz')
-    jobs=$(ls $sra'/*_1.fastq.gz' | wc -l)
+    fq_files=$(ls $sra/*_1.fastq.gz)
+    jobs=$(ls $sra/*_1.fastq.gz | wc -l)
   elif [[ $paired == 'False' || $paired == 'FALSE' || $paired == 'false' || $paired == 0 ]]; then
-    fq_files=$(ls $sra'/*.fastq.gz')
+    fq_files=$(ls $sra/*.fastq.gz )
     layout=SINGLE
-    jobs=$(ls $sra'/*.fastq.gz' | wc -l)
+    jobs=$(ls $sra/*.fastq.gz | wc -l)
   else
     echo "Paresed argument for -p/--paired is invalid. Please choose <True>/<False>"
     exit 2
   fi
-  echo "GREP THIS: $fq_files"
 fi
 
 if [[ -z ${bed+x} ]]; then
@@ -183,7 +182,9 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       ;;
     2)
       mkdir -p $workdir/results
-      $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
+      if [[ fastq == 0 ]]; then
+        $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
+      fi
       PIPE_STEP=3
       conda deactivate
       ;;
@@ -192,7 +193,9 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       $appdir/scripts/build-index.sh $appdir $threads &>> $workdir/run.log
 
       if [[ $fastq == 1 ]]; then
-        parallel -k --lb -j $jobs -a $fq_files $appdir/scripts/tux2map-fq.sh $workdir {} $downstream_threads $appdir $layout &>> $workdir/run.log
+        printf "%s\n" "${fq_files[@]}" > fq_files.txt
+        parallel -k --lb -j $jobs -a $appdir/fq_files.txt $appdir/scripts/tux2map-fq.sh $workdir {} $downstream_threads $appdir $layout &>> $workdir/run.log
+        # rm fq_files.txt 
       else
         parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
       fi

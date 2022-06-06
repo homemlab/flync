@@ -13,7 +13,7 @@ fi
 ### FILE NAMES AND EXTENSIONS NOT WORKING...
 
 fullfile=$(basename -- "$fq")
-filename="${fullfile%.*}"
+filename=$(echo "${fullfile%.*}" | awk -F'[.]' '{print$1}')
 filetype=".""${fullfile##*.}"
 filesuff=$(echo $filename | awk -F'[_]' '{print$1}')
 filepath=$(echo $fq | awk 'BEGIN{FS=OFS="/"}{$NF=""; NF--; print}')
