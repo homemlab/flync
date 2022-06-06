@@ -204,9 +204,16 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       ;;
     4)
       conda activate assembleMod &>> $workdir/run.log
-      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
-      $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &>> $workdir/run.log
-      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
+      if [[ $fastq == 1 ]]; then
+        parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
+        $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &>> $workdir/run.log
+        parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
+      else
+        parallel -k --lb -j $jobs -a fq_files.txt $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
+        $appdir/scripts/tux2merge.sh $workdir fq_files.txt $threads $appdir &>> $workdir/run.log
+        parallel -k --lb -j $jobs -a fq_files.txt $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
+      fi
+      
       cd $workdir
       ls -d ${PWD}/cov/*/ >> $workdir/cov/ballgown_paths.txt
       PIPE_STEP=5

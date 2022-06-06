@@ -93,7 +93,6 @@ sra.add_argument(
     metavar='<FILE>',
     action='store',
     type=lambda p: Path(p).resolve(),
-    default=appdir / 'test' / 'metadata.csv',
     help=f'{bcolors.RED2}(MANDATORY for Diff. Expr. Analysis).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
 )
 
@@ -195,7 +194,6 @@ fastq.add_argument(
     metavar='<FILE>',
     action='store',
     type=lambda p: Path(p).resolve(),
-    default=appdir / 'test' / 'metadata.csv',
     help=f'{bcolors.RED2}(MANDATORY for Diff. Expr. Analysis).{bcolors.NC} Metadata in the .csv format describing the biological condition for each sample to be compared after pseudoalignment and sleuth DE analysis.'
 )
 
@@ -320,9 +318,9 @@ if args.subcommand == 'run':
         main(cmd)
 
 if args.subcommand == 'sra':
-    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix(), args.metadata]
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix(), str(args.metadata)]
     main(cmd)
 
 elif args.subcommand == 'fastq':
-    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.fastq, str(args.threads), appdir.as_posix(), args.metadata, str(args.paired)]
+    cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.fastq, str(args.threads), appdir.as_posix(), str(args.metadata), str(args.paired)]
     main(cmd)

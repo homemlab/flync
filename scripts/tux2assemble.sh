@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 workdir=$1
-sra=$2
+sra=$(basename -- "${2%.*}" | awk -F'[.]' '{print$1}')
+echo "GREP THIS: $sra"
 threads=$3
 appdir=$4
 
