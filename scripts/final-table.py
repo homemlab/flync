@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from cmath import exp
 import sys
 import pandas as pd
 from pathlib import Path
@@ -12,6 +13,7 @@ expr_path = resultsdir/'trans_expr.csv'
 gtf_path = workdir/'cuffcompare/cuffcomp.gtf.tracking'
 dge_path = resultsdir/'dge.csv'
 mlc_path = resultsdir/'ml-classified-new-non-coding.csv'
+cov_path = workdir/'cov'
 bed_path = Path(sys.argv[3])
 
 # READ IN THE TABLES AS DATAFRAMES
@@ -50,6 +52,34 @@ if expr_path.is_file():
     expr = pd.merge(expr.iloc[:, [0, -2, -1]], expr.iloc[:, 1:len(expr.columns)-2], left_index=True, right_index=True)
     final = pd.merge(final, expr, left_on='transfrag', right_on='t_name', how='left')
     final.drop(columns='t_name', inplace=True)
+else:
+    cov_dirs = cov_path.glob('**/*')
+    cov_files = [x for x in cov_dirs if x.stem == 't_data']
+    myVars = vars()
+    for i in cov_files:
+        myVars[str(i.parent.stem + '_expr')]=pd.read_csv(i, delimiter = '\t')
+    expr_tables = [key for key in myVars if '_expr' in key.lower()]
+    expr = myVars[expr_tables[0]]['t_name']
+    for i in expr_tables:
+        expr = pd.merge(expr, myVars[i][['t_name', 'FPKM']], on = 't_name', how = 'outer')
+    
+    expr.fillna(value = 0, inplace = True)
+
+    for i in range(0,len(expr_tables)):
+        mapping = {expr.columns[i+1]: expr_tables[i].split('_')[0] + '_FPKM'}
+        expr.rename(columns = mapping, inplace = True)
+    expr['mean_FPKM'] = expr.loc[:, expr.columns != 't_name'].mean(axis = 1).round(5)
+    filter = ((expr.columns != 't_name') & (expr.columns != 'mean_FPKM'))
+    expr['sd_FPKM'] = expr.loc[:, expr.columns == filter].std(axis = 1, numeric_only = float).round(5)
+
+
+
+    expr.to_csv(resultsdir/'trans_expr.csv', index=False)
+
+    final = pd.merge(final, expr, left_on='transfrag', right_on='t_name', how='left')
+    final.drop(columns='t_name', inplace=True)
+
+    
 
 final.fillna(value=0, inplace=True)
 

@@ -19,24 +19,29 @@ sra=$2
 threads=$3
 appdir=$4
 metadata=$5
+if [[ $metadata == 'None' ]]; then
+  unset metadata
+fi
 paired=$6
-echo $paired
 
-if [[ $paired == '' ]]; then
+if [[ -z $paired ]]; then
   echo -e "!!!WARNING!!! Read layout is unset by user, this is required if providing .fastq.gz files instead of SRA accessions" >> $workdir/run.log
   jobs=$(cat $sra | wc -l)
+  fastq=0
 else
   fastq=1
-  if [[ $paired == 'True' || $paired == 'TRUE' || $paired == 1 ]]; then
+  if [[ $paired == 'True' || $paired == 'TRUE' || $paired == 'true' || $paired == 1 ]]; then
     layout=PAIRED
-    fq_files=$(ls $sra'/*_1.fastq.gz')
-    jobs=$(ls $sra'/*_1.fastq.gz' | wc -l)
-  else
-    fq_files=$(ls $sra'/*.fastq.gz')
+    fq_files=$(ls $sra/*_1.fastq.gz)
+    jobs=$(ls $sra/*_1.fastq.gz | wc -l)
+  elif [[ $paired == 'False' || $paired == 'FALSE' || $paired == 'false' || $paired == 0 ]]; then
+    fq_files=$(ls $sra/*.fastq.gz )
     layout=SINGLE
-    jobs=$(ls $sra'/*.fastq.gz' | wc -l)
+    jobs=$(ls $sra/*.fastq.gz | wc -l)
+  else
+    echo "Paresed argument for -p/--paired is invalid. Please choose <True>/<False>"
+    exit 2
   fi
-  echo "GREP THIS: $fq_files"
 fi
 
 if [[ -z ${bed+x} ]]; then
@@ -57,11 +62,11 @@ echo 'Threads available: ' $threads &>> $workdir/run.log
 
 echo 'Number of samples for this run: ' $jobs &>> $workdir/run.log
 if [[ $threads -ge $jobs ]]; then
-    downstream_threads=$(expr $threads / $jobs)
-    downstream_threads=${downstream_threads%.*}
+  downstream_threads=$(bc -l <<< 'scale=2; '$threads'/'$jobs'')
+  downstream_threads=${downstream_threads%.*}
 else
-    jobs=$threads
-    downstream_threads=1
+  jobs=$threads
+  downstream_threads=1
 fi
 echo 'Number of threads per running sample: ' $downstream_threads &>> $workdir/run.log
 
@@ -75,11 +80,24 @@ trap BLA::stop_loading_animation SIGINT
 # BLA::start_loading_animation "${BLA_braille_whitespace[@]}"
 # BLA::stop_loading_animation
 
+## PREPARE CONDA ##
 conda_path=$(conda info | grep -i 'base environment' | awk '{print$(4)}')
 conda_sh=$conda_path'/etc/profile.d/conda.sh'
 
 source $conda_sh
 conda init $(echo $SHELL | awk -F'[/]' '{print$(NF)}') &> $appdir/cmd.out
+
+function clean_up {
+
+    # Perform program exit housekeeping
+    # kill $(ps -s $$ -o pid=)
+    pkill -P $$
+    exit 2
+}
+
+export -f clean_up
+
+trap clean_up SIGHUP SIGINT SIGTERM
 
 ## INITIATE PIPELINE ##
 PIPE_STEP=1
@@ -88,14 +106,15 @@ while true;
 do
   if [[ PIPE_STEP -eq 0 ]]; then
     BLA::stop_loading_animation
-    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[10A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${GREEN}[🧱] Building transcriptomes${NC}
 ${GREEN}[🎲] Calculating conding probability of new transcripts${NC}
 ${GREEN}[📈] Differential transcript expressions analysis (if -m)${NC}
-${GREEN}[📡] Extracting candidate features from databases${NC}"
+${GREEN}[📡] Extracting candidate features from databases${NC}
+${GREEN}[🧠] Predicting non-coding gene probability${NC}"
     echo -e "${YELLOW}Program terminated. If you ran into any errors check${NC} run.log ${YELLOW}on the output directory${NC}"
     break
   elif [[ PIPE_STEP -eq 1 ]]; then
@@ -106,61 +125,78 @@ ${CYAN}[ ] Mapping samples to reference genome${NC}
 ${CYAN}[ ] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Differential transcript expressions analysis (if -m)${NC}
-${CYAN}[ ] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
   elif [[ PIPE_STEP -eq 2 ]]; then
-    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${CYAN}[-] Gathering sample information from SRA database {flync sra}${NC}
 ${CYAN}[ ] Mapping samples to reference genome${NC}
 ${CYAN}[ ] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Differential transcript expressions analysis (if -m)${NC}
-${CYAN}[ ] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
   elif [[ PIPE_STEP -eq 3 ]]; then
-    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${CYAN}[-] Mapping samples to reference genome${NC}
 ${CYAN}[ ] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Differential transcript expressions analysis (if -m)${NC}
-${CYAN}[ ] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
   elif [[ PIPE_STEP -eq 4 ]]; then
-    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${CYAN}[-] Building transcriptomes${NC}
 ${CYAN}[ ] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Differential transcript expressions analysis (if -m)${NC}
-${CYAN}[ ] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
   elif [[ PIPE_STEP -eq 5 ]]; then
-    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${GREEN}[🧱] Building transcriptomes${NC}
 ${CYAN}[-] Calculating conding probability of new transcripts${NC}
 ${CYAN}[ ] Differential transcript expressions analysis (if -m)${NC}
-${CYAN}[ ] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
   elif [[ PIPE_STEP -eq 6 ]]; then
-    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${GREEN}[🧱] Building transcriptomes${NC}
 ${GREEN}[🎲] Calculating conding probability of new transcripts${NC}
 ${CYAN}[-] Differential transcript expressions analysis (if -m)${NC}
-${CYAN}[ ] Extracting candidate features from databases${NC}"
+${CYAN}[ ] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
   elif [[ PIPE_STEP -eq 7 ]]; then
-    echo -e "\r\e[8A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
 ${GREEN}[🧬] Preparing reference genome files${NC}
 ${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
 ${GREEN}[🧩] Mapping samples to reference genome${NC}
 ${GREEN}[🧱] Building transcriptomes${NC}
 ${GREEN}[🎲] Calculating conding probability of new transcripts${NC}
 ${GREEN}[📈] Differential transcript expressions analysis (if -m)${NC}
-${CYAN}[-] Extracting candidate features from databases${NC}"
+${CYAN}[-] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
+  elif [[ PIPE_STEP -eq 8 ]]; then
+    echo -e "\r\e[9A\e[K[🦟] ${BOLD}${PURPLE}FLYNC is processing your samples:${NC}
+${GREEN}[🧬] Preparing reference genome files${NC}
+${GREEN}[📑] Gathering sample information from SRA database {flync sra}${NC}
+${GREEN}[🧩] Mapping samples to reference genome${NC}
+${GREEN}[🧱] Building transcriptomes${NC}
+${GREEN}[🎲] Calculating conding probability of new transcripts${NC}
+${GREEN}[📈] Differential transcript expressions analysis (if -m)${NC}
+${GREEN}[📡] Extracting candidate features from databases${NC}
+${CYAN}[ ] Predicting non-coding gene probability${NC}"
   fi
 
   case $PIPE_STEP in
@@ -180,7 +216,9 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       ;;
     2)
       mkdir -p $workdir/results
-      $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
+      if [[ $fastq == 0 ]]; then
+        $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
+      fi
       PIPE_STEP=3
       conda deactivate
       ;;
@@ -189,7 +227,8 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       $appdir/scripts/build-index.sh $appdir $threads &>> $workdir/run.log
 
       if [[ $fastq == 1 ]]; then
-        parallel -k --lb -j $jobs -a $fq_files $appdir/scripts/tux2map-fq.sh $workdir {} $downstream_threads $appdir $layout &>> $workdir/run.log
+        printf "%s\n" "${fq_files[@]}" > fq_files.txt
+        parallel -k --lb -j $jobs -a $appdir/fq_files.txt $appdir/scripts/tux2map-fq.sh $workdir {} $downstream_threads $appdir $layout &>> $workdir/run.log
       else
         parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2map.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
       fi
@@ -198,9 +237,16 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       ;;
     4)
       conda activate assembleMod &>> $workdir/run.log
-      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
-      $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &>> $workdir/run.log
-      parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
+      if [[ $fastq == 1 ]]; then
+        parallel -k --lb -j $jobs -a fq_files.txt $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
+        $appdir/scripts/tux2merge.sh $workdir fq_files.txt $threads $appdir &>> $workdir/run.log
+        parallel -k --lb -j $jobs -a fq_files.txt $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
+      else
+        parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2assemble.sh $workdir {} $downstream_threads $appdir &>> $workdir/run.log
+        $appdir/scripts/tux2merge.sh $workdir $sra $threads $appdir &>> $workdir/run.log
+        parallel -k --lb -j $jobs -a $sra $appdir/scripts/tux2count.sh $workdir {} &>> $workdir/run.log
+      fi
+      
       cd $workdir
       ls -d ${PWD}/cov/*/ >> $workdir/cov/ballgown_paths.txt
       PIPE_STEP=5
@@ -233,14 +279,22 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       conda deactivate
 
       cd $workdir
-      conda activate featureMod
+      conda activate mapMod
       
       mkdir -p $workdir/results/non-coding/features
       
       # Got 24% faster by parallelizing the get-features.sh script
       jobs2=$(cat $appdir/static/tracksFile.tsv | wc -l)
-      downstream_threads=$(expr $threads / $jobs2)
+      downstream_threads=$(bc -l <<< 'scale=2; '$threads'/'$jobs2'')
       downstream_threads=${downstream_threads%.*}
+      if [[ $downstream_threads < 1 ]]; then
+        downstream_threads=1
+      fi
+      
+      conda deactivate
+
+      conda activate featureMod
+
       parallel --no-notice -k --lb -j $jobs2 -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $bed $workdir/results/non-coding $downstream_threads &>> $workdir/run.log
 
       # Write a .csv file with the filepaths for the tables to be processed in python Pandas
@@ -249,10 +303,14 @@ ${CYAN}[-] Extracting candidate features from databases${NC}"
       paste -d, names.tmp path.tmp > $workdir/results/non-coding/features/paths.csv
       rm names.tmp path.tmp &>> $workdir/run.log
 
+      if [[ $fastq == 1 ]]; then
+        rm $appdir/fq_files.txt
+      fi
+
       conda deactivate
-
-      ### TO-DO: TRANSFER THIS TO NEW STEP ###
-
+      PIPE_STEP=8
+      ;;
+    8)
       conda activate predictMod
 
       python3 $appdir/scripts/feature-table.py $appdir $workdir $bed &>> $workdir/run.log
