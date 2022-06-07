@@ -24,8 +24,7 @@ if [[ $metadata == 'None' ]]; then
 fi
 paired=$6
 
-
-if [[ $paired == '' ]]; then
+if [[ -z $paired ]]; then
   echo -e "!!!WARNING!!! Read layout is unset by user, this is required if providing .fastq.gz files instead of SRA accessions" >> $workdir/run.log
   jobs=$(cat $sra | wc -l)
   fastq=0
@@ -217,7 +216,7 @@ ${CYAN}[ ] Predicting non-coding gene probability${NC}"
       ;;
     2)
       mkdir -p $workdir/results
-      if [[ fastq == 0 ]]; then
+      if [[ $fastq == 0 ]]; then
         $appdir/scripts/get-sra-info.sh $workdir $sra &>> $workdir/run.log
       fi
       PIPE_STEP=3
@@ -304,7 +303,7 @@ ${CYAN}[ ] Predicting non-coding gene probability${NC}"
       paste -d, names.tmp path.tmp > $workdir/results/non-coding/features/paths.csv
       rm names.tmp path.tmp &>> $workdir/run.log
 
-      if [[ fastq == 1 ]]; then
+      if [[ $fastq == 1 ]]; then
         rm $appdir/fq_files.txt
       fi
 

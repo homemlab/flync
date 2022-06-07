@@ -18,8 +18,6 @@ filetype=".""${fullfile##*.}"
 filesuff=$(echo $filename | awk -F'[_]' '{print$1}')
 filepath=$(echo $fq | awk 'BEGIN{FS=OFS="/"}{$NF=""; NF--; print}')
 
-echo $filename, $filesuff, $filetype, $filepath
-
 cd $workdir
 mkdir -p $workdir/data/$filename
 

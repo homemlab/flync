@@ -32,7 +32,7 @@ mv $workdir/assemblies/stringtie/merged.gtf $workdir/assemblies/merged.gtf
 # if [ ! -e $workdir/assemblies/merged.gtf ]; then
 #    stringtie --merge $workdir/assemblies/final_merge.txt -G $appdir/genome/genome.gtf -o $workdir/assemblies/merged.gtf
 # fi
-# echo 'Done'
+echo 'Done'
 
 echo ----- COMPARING ASSEMBLY TO REFERENCE -----
 mkdir -p $workdir/cuffcompare 

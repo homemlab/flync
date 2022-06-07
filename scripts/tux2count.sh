@@ -12,5 +12,3 @@ if [ ! -e $workdir/cov/$sra'.rna.gtf' ]; then
     stringtie -eB $workdir/data/$sra/$sra'.sorted.bam' -G $workdir/assemblies/merged.gtf -o $workdir/cov/$sra/$sra'.rna.gtf'
     echo 'Done'
 fi
-
-
