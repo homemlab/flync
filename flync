@@ -11,9 +11,9 @@ import sys
 import yaml
 
 # HARD CODED VARS
-__author__ = 'Ricardo F. dos Santos'
-__mail__ = '<ricardo.santos@nms.unl.pt>'
-__version__ = '1.5.9'
+author = 'Ricardo F. dos Santos'
+mail = '<ricardo.santos@nms.unl.pt>'
+version = '1.5.9'
 appdir = Path(__file__).resolve().parent
 genome_release = 'Ensembl BDGP6.32 release'
 
@@ -35,13 +35,13 @@ class bcolors:
     PURPLE2='\033[1;35m'
 
 parser = argparse.ArgumentParser(prog='flync', description=f'''{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification options:{bcolors.NC}
-Version: {__version__}
-Author: {__author__}
-Contact: {__mail__}
+Version: {version}
+Author: {author}
+Contact: {mail}
 ''', formatter_class=RawTextHelpFormatter)
 
 parser.add_argument('--version', action='version',
-                    version='%(prog)s {version}'.format(version=__version__))
+                    version='%(prog)s {version}'.format(version=version))
 
 subparsers = parser.add_subparsers(title='subcommands',
                                    description=f'{bcolors.YELLOW}Please choose one of the valid subcommands.{bcolors.NC} \nRun {bcolors.CYAN}flync <subcommand> --help{bcolors.NC} to see available options.',
@@ -262,9 +262,9 @@ def main(cmd_string):
 #             sys.stdout.flush()
 
 print(f'''{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification{bcolors.NC}
-Version: {__version__}
-Author: {__author__}
-Contact: {__mail__}
+Version: {version}
+Author: {author}
+Contact: {mail}
 ''')
 
 # PARSE YAML CONFIG FILE
