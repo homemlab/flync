@@ -2,7 +2,7 @@
 echo "Preparing"
 appdir=$(dirname "$0")
 appdir=$(cd "$appdir" && pwd)
-conda install -n base -c conda-forge pyyaml bc -y
+conda install -n base -c conda-forge pyyaml -y
 echo "Installing environment..."
 ls "$appdir"/env/*.yml > envs.txt
 while read i; do
