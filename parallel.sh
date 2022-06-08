@@ -56,21 +56,6 @@ fi
 #genome=$(readlink -f $8)
 #annot=$(readlink -f $9)
 
-## DEFINE THREADS FOR RUUNING PIPELINE ##
-
-echo 'Threads available: ' $threads &>> $workdir/run.log
-
-echo 'Number of samples for this run: ' $jobs &>> $workdir/run.log
-if [[ $threads -ge $jobs ]]; then
-  downstream_threads=$(bc -l <<< 'scale=2; '$threads'/'$jobs'')
-  downstream_threads=${downstream_threads%.*}
-else
-  jobs=$threads
-  downstream_threads=1
-fi
-echo 'Number of threads per running sample: ' $downstream_threads &>> $workdir/run.log
-
-
 ## ANIMATED OUTPUT ##
 # Load in the functions and animations
 source "$appdir"/scripts/anime.sh
@@ -98,6 +83,20 @@ function clean_up {
 export -f clean_up
 
 trap clean_up SIGHUP SIGINT SIGTERM
+
+## DEFINE THREADS FOR RUUNING PIPELINE ##
+conda activate mapMod
+echo 'Threads available: ' $threads &>> $workdir/run.log
+echo 'Number of samples for this run: ' $jobs &>> $workdir/run.log
+if [[ $threads -ge $jobs ]]; then
+  downstream_threads=$(bc -l <<< 'scale=2; '$threads'/'$jobs'')
+  downstream_threads=${downstream_threads%.*}
+else
+  jobs=$threads
+  downstream_threads=1
+fi
+echo 'Number of threads per running sample: ' $downstream_threads &>> $workdir/run.log
+conda deactivate
 
 ## INITIATE PIPELINE ##
 PIPE_STEP=1
