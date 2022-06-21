@@ -247,7 +247,7 @@ ${CYAN}[ ] Predicting non-coding gene probability${NC}"
       fi
       
       cd $workdir
-      ls -d ${PWD}/cov/*/ >> $workdir/cov/ballgown_paths.txt
+      ls -d ${PWD}/cov/*/ | sort -V >> $workdir/cov/ballgown_paths.txt
       PIPE_STEP=5
       conda deactivate
       ;;
