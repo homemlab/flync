@@ -16,8 +16,7 @@ pheno_data <- read.csv(mdfile, header = FALSE)
 colnames(pheno_data) = c("sample", "condition")
 
 # get paths to the ballgown files per sample
-sample_vector <- list.dirs(path = "cov")
-sample_vector <- sample_vector[-1]
+sample_vector <- scan(paste(workdir, "/cov/ballgown_paths.txt", sep = ""), what="", sep="\n")
 
 # initiate the ballgown object
 bg_obj <- ballgown(pData = pheno_data, samples = sample_vector)
