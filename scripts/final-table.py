@@ -79,8 +79,7 @@ else:
     final = pd.merge(final, expr, left_on='transfrag', right_on='t_name', how='left')
     final.drop(columns='t_name', inplace=True)
 
-    
-
+final.drop_duplicates('transfrag', keep='first', inplace=True)
 final.fillna(value=0, inplace=True)
 
 # Get the top 20 more probable new lncRNAs
