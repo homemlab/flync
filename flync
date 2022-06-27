@@ -59,7 +59,7 @@ run.add_argument(
     action='store',
     type=lambda p: Path(p).resolve(),
     default=appdir / 'test' / 'config.yaml',
-    help=f'{bcolors.YELLOW}{bcolors.UNDERLINE}RECOMENDED. Dispenses all other options.{bcolors.NC} Configuration file (YAML format) with arguments for running the pipeline. Default = {bcolors.BOLD}{bcolors.CYAN}' + appdir.as_posix() + '/config.yaml'
+    help=f'{bcolors.YELLOW}{bcolors.UNDERLINE}RECOMENDED. Dispenses all other options.{bcolors.NC} Configuration file (YAML format) with arguments for running the pipeline. Default = {bcolors.BOLD}{bcolors.CYAN}test/config.yaml'
 )
 
 ### SRA PIPELINE ARGUMENTS ###
