@@ -35,13 +35,13 @@ You can see the CLI FLYNC help by running `flync --help` or subcommand specific 
 To use the `docker` image image be sure to map a local folder to keep the results in. FLYNC allows (and encourages) to set an output folder for the results.  
 Example:
 ```
-docker run --rm -v $PWD:/data rfcdsantos/flync flync sra -l test/list.txt -m metadata.csv -o /data/test_run
+docker run --rm -v $PWD:/data rfcdsantos/flync flync sra -l test/list.txt -m test/metadata.csv -o /data/test_run
 ```
 ### Conda
 To use locally with `conda` run `flync` from the cloned directory with the required arguments.  
 Similarly as in with `docker`:
 ```
-./flync sra -l test/list.txt -m metadata.csv -o ./test_run
+./flync sra -l test/list.txt -m test/metadata.csv -o ./test_run
 ```
 
 
