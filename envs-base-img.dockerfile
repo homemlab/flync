@@ -2,7 +2,7 @@ FROM continuumio/miniconda3:latest
 
 ENV TERM=xterm-256color
 
-SHELL [/bin/bash -c]
+SHELL ["/bin/bash"; "-c"]
 
 RUN mkdir /bin/app
 
