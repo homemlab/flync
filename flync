@@ -126,16 +126,6 @@ sra.add_argument(
     help='Number of threads to use during execution (default = 2).'
 )
 
-# sra.add_argument(
-#     '--quality',
-#     '-q',
-#     metavar='<INT>',
-#     action='store',
-#     type=int,
-#     default=50,
-#     help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
-# )
-
 ### FASTQ PIPELINE ARGUMENTS ###
 fastq = subparsers.add_parser('fastq', help='Run full pipeline by providing a local <dir> containing the <fastq.gz> files to be used as input.', formatter_class=RawTextHelpFormatter)
 
@@ -161,7 +151,6 @@ fastq.add_argument(
     required=True
 )
 
-
 fastq.add_argument(
     '--paired',
     '-p',
@@ -171,22 +160,6 @@ fastq.add_argument(
     default=False,
     help='Set to <true> (1) or <false> (0) if provided reads are paired-end or not. If false or unset will assume unpaired reads.'
 )
-
-# fastq.add_argument(
-#     '--split',
-#     '-s',
-#     metavar='<STR>',
-#     action='store',
-#     type=str,
-#     default='full',
-#     help=f'''Split mode: Run specific parts of the analysis pipeline. Available options are:
-#     [full] : Preform the main pipeline: Read alignment, Transcriptome assembly, Coding probability & Transcript scoring and classification.
-#     [map] : Only download (if -l is provided) and map reads to the reference genome.
-#     [map-stats] : Perform the analysis of the mapping statistics and prepares files for assembly step.
-#     [assembly] : Perform assembly step and coding probability assessment. Also outputs final results.
-#     [dge] : Perform the whole pipeline plus a pseudoalignment with Differential Gene Expression analysis considering the newly discovered transcripts.
-#     [clean] : Intended to remove unnecessary files after complete run. Will delete data/ and assemblies/ folder.'''
-# )
 
 fastq.add_argument(
     '--metadata',
@@ -227,16 +200,6 @@ fastq.add_argument(
     help='Number of threads to use during execution (default = 2).'
 )
 
-# fastq.add_argument(
-#     '--quality',
-#     '-q',
-#     metavar='<INT>',
-#     action='store',
-#     type=int,
-#     default=50,
-#     help='Alignment quality. Minimum percentage of reads aligned to reference genome to be considered for transcriptome assembly (default = 50).'
-# )
-
 args = parser.parse_args()
 
 def main(cmd_string):
@@ -245,27 +208,11 @@ def main(cmd_string):
         stderr = sys.stderr,
     ).communicate()
 
-# def main2(cmd_string):
-#     process = subprocess.Popen(cmd_string,
-#         bufsize = 1,
-#         stdout = subprocess.PIPE,
-#         stderr = subprocess.STDOUT,
-#         encoding='utf-8',
-#         errors = 'replace'
-#     )
-#     while True:
-#         realtime_output = process.stdout.read(1)
-#         if realtime_output == '' and process.poll() is not None:
-#             break
-#         if realtime_output:
-#             print(realtime_output.strip(), flush=False)
-#             sys.stdout.flush()
-
-print(f'''{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification{bcolors.NC}
+msg = f'''{bcolors.HEADER}{bcolors.UNDERLINE}Fly Non-Coding RNA discovery and classification{bcolors.NC}
 Version: {version}
 Author: {author}
 Contact: {mail}
-''')
+'''
 
 # PARSE YAML CONFIG FILE
 
@@ -293,6 +240,7 @@ if args.subcommand == 'run':
             yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
     # Call parallel.sh with the parsed arguments
         cmd=[appdir.as_posix() + '/parallel.sh', yaml_output, yaml_fastq_path, str(yaml_threads), appdir.as_posix(), yaml_metadata, yaml_fastq_paired]
+        print(msg)
         main(cmd)
     else:
         # Run the sra pipeline
@@ -313,12 +261,15 @@ if args.subcommand == 'run':
             yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
     # Call parallel.sh with the parsed arguments
         cmd=[appdir.as_posix() + '/parallel.sh', yaml_output, yaml_sra, str(yaml_threads), appdir.as_posix(), yaml_metadata]
+        print(msg)
         main(cmd)
 
 if args.subcommand == 'sra':
     cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.list, str(args.threads), appdir.as_posix(), str(args.metadata)]
+    print(msg)
     main(cmd)
 
-elif args.subcommand == 'fastq':
+if args.subcommand == 'fastq':
     cmd=[appdir.as_posix() + '/parallel.sh', args.output, args.fastq, str(args.threads), appdir.as_posix(), str(args.metadata), str(args.paired)]
+    print(msg)
     main(cmd)

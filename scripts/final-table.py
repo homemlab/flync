@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from cmath import exp
 import sys
 import pandas as pd
 from pathlib import Path
