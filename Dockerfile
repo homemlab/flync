@@ -1,4 +1,4 @@
-FROM rfcdsantos/flync:base-with-envs
+FROM rfcdsantos/flync:base-envs
 
 COPY . /bin/app
 
