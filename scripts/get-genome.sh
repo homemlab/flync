@@ -5,37 +5,30 @@ cd $appdir
 mkdir -p genome 
 cd genome
 
-### Download latest Drosophila melanogaster genome and annotation file ###
+### Download Drosophila melanogaster BDGP6.32 release 106 genome and annotation file ###
 
 if [ -f 'genome.fa' ]
 then
     echo '!!!'WARNING'!!!' Genome sequence already downloaded. Skipping step.
 else
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.2L.fa.gz' -O genome.2L.fa.gz
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.2R.fa.gz' -O genome.2R.fa.gz
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.3L.fa.gz' -O genome.3L.fa.gz
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.3R.fa.gz' -O genome.3R.fa.gz
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.4.fa.gz' -O genome.4.fa.gz
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.X.fa.gz' -O genome.X.fa.gz
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.Y.fa.gz' -O genome.Y.fa.gz
-    wget -q 'http://ftp.ensembl.org/pub/current_fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.mitochondrion_genome.fa.gz' -O genome.mitochondrion_genome.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.2L.fa.gz' -O genome.2L.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.2R.fa.gz' -O genome.2R.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.3L.fa.gz' -O genome.3L.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.3R.fa.gz' -O genome.3R.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.4.fa.gz' -O genome.4.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.X.fa.gz' -O genome.X.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.Y.fa.gz' -O genome.Y.fa.gz
+    wget -q 'https://ftp.ensembl.org/pub/release-106/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.primary_assembly.mitochondrion_genome.fa.gz' -O genome.mitochondrion_genome.fa.gz
     zcat genome.2L.fa.gz genome.2R.fa.gz genome.3L.fa.gz genome.3R.fa.gz genome.4.fa.gz genome.X.fa.gz genome.Y.fa.gz genome.mitochondrion_genome.fa.gz > genome.fa    
     rm genome.*.fa.gz   
-    #wget -q 'http://ftp.ensembl.org/pub/release-104/fasta/drosophila_melanogaster/dna/Drosophila_melanogaster.BDGP6.32.dna.toplevel.fa.gz' -O genome.fa.gz
-    #wget -q 'ftp://hgdownload.cse.ucsc.edu/goldenPath/dm6/bigZips/dm6.fa.gz' -O genome.fa.gz
-    #gzip -v -d --force genome.fa.gz
 fi
 
 if [ -f 'genome.gtf' ]
 then
     echo '!!!'WARNING'!!!' Annotation already downloaded. Skipping step.
 else
-    ### Annotation files from different DBs ###
-    ## Uncomment desired annotation source   ##
-    wget -q 'http://ftp.ensembl.org/pub/current_gtf/drosophila_melanogaster/Drosophila_melanogaster.BDGP6.32.106.chr.gtf.gz' -O genome.gtf.gz
-    #wget -q 'ftp://hgdownload.soe.ucsc.edu/goldenPath/dm6/bigZips/genes/dm6.ensGene.gtf.gz' -O genome.gtf.gz
-    #wget -q "ftp://hgdownload.soe.ucsc.edu/goldenPath/dm6/bigZips/genes/dm6.ncbiRefSeq.gtf.gz" -O genome.gtf.gz
-    #wget -q "ftp://hgdownload.soe.ucsc.edu/goldenPath/dm6/bigZips/genes/dm6.refGene.gtf.gz" -O genome.gtf.gz
+    ### Annotation files ###
+    wget -q 'https://ftp.ensembl.org/pub/release-106/gtf/drosophila_melanogaster/Drosophila_melanogaster.BDGP6.32.106.chr.gtf.gz' -O genome.gtf.gz
     gzip -v -d --force genome.gtf.gz
 fi
 
