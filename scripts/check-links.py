@@ -28,7 +28,8 @@ async def validate_links(links):
 
 if __name__ == "__main__":
 
-    results = asyncio.run(validate_links(links))
+    loop = asyncio.get_event_loop()
+    results = loop.run_until_complete(validate_links(links))
     for result in results:
         if result[1] == 1:
             Exception(f'❌ URL: {result[0]} is not reachable... exiting')
