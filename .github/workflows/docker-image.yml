@@ -1,6 +1,7 @@
 name: Build and publish main Docker image
 
 on:
+  workflow_dispatch:
   workflow_run:
     workflows: ["Build and publish envs Docker image"]
     types:
