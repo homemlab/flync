@@ -39,17 +39,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          flavor: latest=true
           images: rfcdsantos/flync
           tags: |
-            type=raw,value=${{ env.BRANCH }},suffix={{date 'YYYYMMDD'}}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=schedule,pattern={{date 'YYYYMMDD'}}
-
+            type=raw,value=${{ "base-envs" }},suffix={{date 'YYYYMMDD'}}
+            type=raw,value=${{ "base-envs" }}
           
       - name: Build and push Docker image
         uses: docker/build-push-action@v2
