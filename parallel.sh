@@ -204,6 +204,13 @@ ${CYAN}[ ] Predicting non-coding gene probability${NC}"
       ## RUN SCRIPTS FOR GETTING GENOME AND INFO ON SRA RUNS
       conda activate infoMod &>> $workdir/run.log
 
+      ## VALIDATE LINKS ##
+      python3 $appdir/scripts/check-links.py &>> $workdir/run.log
+      if [[ $? -eq 1 ]]; then
+        echo -e "${RED}ERROR${NC}: Some links are broken. Please check the run.log file for more information"
+        exit 1
+      fi
+      
       ## SILENCE PARALLEL FIRST RUN ##
       parallel --citation &> $appdir/cmd.out
       echo will cite &> $appdir/cmd.out
