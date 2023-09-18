@@ -1,22 +1,22 @@
-name: Build and publish main Docker image
+name: Build and publish envs Docker image
 
 on:
-  workflow_run:
-    workflows: ["Build and publish envs Docker image"]
-    types:
-      - completed
   push:
     branches:
       - 'main'
       - 'master'
     tags:
       - v*
+    paths:
+      - 'env/**'
   pull_request:
     branches:
       - 'main'
       - 'master'
     tags:
       - v*
+    paths:
+      - 'env/**'
 
 jobs:
   push_to_registry:
@@ -55,6 +55,7 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: .
+          file: base-envs.dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -6,16 +6,22 @@ channels:
 dependencies:
   - _libgcc_mutex=0.1
   - _openmp_mutex=4.5
+  - aiohttp=3.7.4.post0
+  - async-timeout=3.0.1
+  - attrs=22.2.0
   - bedops=2.4.39
   - bzip2=1.0.8
   - c-ares=1.18.1
-  - ca-certificates=2021.10.8
+  - ca-certificates=2023.7.22
+  - chardet=4.0.0
   - coreutils=9.0
   - entrez-direct=16.2
   - gettext=0.19.8.1
   - gffread=0.12.7
   - gzip=1.11
   - htslib=1.15.1
+  - idna=3.4
+  - idna_ssl=1.1.0
   - keyutils=1.6.1
   - krb5=1.19.3
   - ld_impl_linux-64=2.36.1
@@ -33,8 +39,9 @@ dependencies:
   - libstdcxx-ng=11.2.0
   - libunistring=0.9.10
   - libzlib=1.2.11
+  - multidict=5.2.0
   - ncurses=6.3
-  - openssl=1.1.1n
+  - openssl=1.1.1o
   - pip=21.3.1
   - python=3.6.15
   - python_abi=3.6
@@ -43,7 +50,10 @@ dependencies:
   - setuptools=58.0.4
   - sqlite=3.38.2
   - tk=8.6.12
+  - typing-extensions=4.1.1
+  - typing_extensions=4.1.1
   - wget=1.20.3
   - wheel=0.37.1
   - xz=5.2.5
+  - yarl=1.6.3
   - zlib=1.2.11
