@@ -42,8 +42,8 @@ jobs:
         with:
           images: rfcdsantos/flync
           tags: |
-            type=raw,value=${{ "base-envs" }},suffix={{date 'YYYYMMDD'}}
-            type=raw,value=${{ "base-envs" }}
+            type=raw,value=base-envs-,suffix={{date 'YYYYMMDD'}}
+            type=raw,value=base-envs
           
       - name: Build and push Docker image
         uses: docker/build-push-action@v2
