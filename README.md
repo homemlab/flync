@@ -1,8 +1,10 @@
+![FLYNC logo](logo.jpeg)
+
 # FLYNC - FLY Non-Coding gene discovery & classification
 
 FLYNC is an end-to-end software pipeline that takes reads from transcriptomic experiments and outputs a curated list of new **non-coding** genes as classified by a pre-trained **Machine-Learning model**.  
 
-- [FLYNC - FLY Non-Coding gene discovery & classification](#flync---fly-non-coding-gene-discovery--classification)
+- [FLYNC - FLY Non-Coding gene discovery \& classification](#flync---fly-non-coding-gene-discovery--classification)
   - [Pipeline overview](#pipeline-overview)
   - [Pre-installation](#pre-installation)
   - [Installation](#installation)
