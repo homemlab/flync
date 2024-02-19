@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import aiohttp
 import asyncio
 from pathlib import Path
@@ -18,7 +20,7 @@ async def validate_link(session, url):
             else:
                 return (url, 1)
     except Exception as e:
-        return f'{url} is not valid, error: {e}'
+        return (f'Invalid URL: {url}; Error {e}', 1)
 
 async def validate_links(links):
     async with aiohttp.ClientSession() as session:
@@ -32,9 +34,11 @@ if __name__ == "__main__":
     results = loop.run_until_complete(validate_links(links))
     for result in results:
         if result[1] == 1:
-            Exception(f'❌ URL: {result[0]} is not reachable... exiting')
-            exit(1)
+            print(f'❌ URL: {result[0]} is not reachable... exiting')
         elif result[1] == 0:
             print(f'✔ URL: {result[0]} is reachable... continuing')
 
-    print("All required links are reachable... continuing")
+    if 1 in [result[1] for result in results]:
+        raise Exception("❌ One or more required links are not reachable... exiting")
+    else:
+        print("All required links are reachable... continuing")

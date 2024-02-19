@@ -234,10 +234,10 @@ if args.subcommand == 'run':
         yaml_metadata = Path(parsed_yaml['metadata']).absolute().as_posix()
         yaml_threads = str(parsed_yaml['threads'])
         
-        test_genome = parsed_yaml['genome_active']
-        if test_genome:
-            yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
-            yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
+        # test_genome = parsed_yaml['genome_active']
+        # if test_genome:
+        #     yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
+        #     yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
     # Call parallel.sh with the parsed arguments
         cmd=[appdir.as_posix() + '/parallel.sh', yaml_output, yaml_fastq_path, str(yaml_threads), appdir.as_posix(), yaml_metadata, yaml_fastq_paired]
         print(msg)
@@ -246,6 +246,11 @@ if args.subcommand == 'run':
         # Run the sra pipeline
         test_output = Path(parsed_yaml['output']).absolute().as_posix()
         if test_output != '':
+            try:
+                Path(test_output).mkdir(parents=True, exist_ok=True)
+            except:
+                raise PermissionError(Path(test_output).absolute())
+            
             yaml_output = test_output
 
         if Path(parsed_yaml['sra']).is_file() == False:
@@ -255,10 +260,10 @@ if args.subcommand == 'run':
         yaml_metadata = Path(parsed_yaml['metadata']).absolute().as_posix()
         yaml_threads = str(parsed_yaml['threads'])
 
-        test_genome = parsed_yaml['genome_active']
-        if test_genome:
-            yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
-            yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
+        # test_genome = parsed_yaml['genome_active']
+        # if test_genome:
+        #     yaml_genome_sequence = Path(parsed_yaml['genome_sequence']).absolute().as_posix()
+        #     yaml_genome_annotation = Path(parsed_yaml['genome_annotation']).absolute().as_posix()
     # Call parallel.sh with the parsed arguments
         cmd=[appdir.as_posix() + '/parallel.sh', yaml_output, yaml_sra, str(yaml_threads), appdir.as_posix(), yaml_metadata]
         print(msg)

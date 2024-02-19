@@ -301,7 +301,25 @@ ${CYAN}[ ] Predicting non-coding gene probability${NC}"
 
       conda activate featureMod
 
-      parallel --no-notice -k --lb -j $jobs2 -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $bed $workdir/results/non-coding $downstream_threads &>> $workdir/run.log
+      find $appdir -type f \( -name "*.bw" -o -name "*.bb" \) > $appdir/static/localTracks.txt
+
+      if [[ $(cat $appdir/static/localTracks.txt | wc -l) -gt 0 ]]; then
+        
+        while read -r line; do
+          track=$(basename $line | awk -F'[.]' '{print$1}') &>> $workdir/run.log
+          echo -e "${track}\t${line}" >> $appdir/static/localTracks.tsv
+        done < $appdir/static/localTracks.txt
+
+        if [[ $(cat $appdir/static/localTracks.tsv | wc -l) -eq $(cat $appdir/static/localTracks.txt | wc -l) ]]; then
+          rm $appdir/static/localTracks.txt &>> $workdir/run.log
+          parallel --no-notice -k --lb -j $jobs2 -a $appdir/static/localTracks.tsv $appdir/scripts/get-features.sh {} $bed $workdir/results/non-coding $downstream_threads &>> $workdir/run.log
+          rm $appdir/static/localTracks.tsv &>> $workdir/run.log
+        else
+          parallel --no-notice -k --lb -j $jobs2 -a $appdir/static/tracksFile.tsv $appdir/scripts/get-features.sh {} $bed $workdir/results/non-coding $downstream_threads &>> $workdir/run.log
+          rm $appdir/static/localTracks.tsv &>> $workdir/run.log
+        fi
+
+      fi
 
       # Write a .csv file with the filepaths for the tables to be processed in python Pandas
       ls $workdir/results/non-coding/features | grep tsv | sed 's/.tsv//g' > names.tmp

@@ -36,8 +36,33 @@ results_transcripts <- data.frame(geneNames = geneNames(bg_obj_filt),
                                   geneIDs = geneIDs(bg_obj_filt),
                                   results_transcripts)
 
-# write final table
+# write final transcript table
+write.csv(results_transcripts, "results/dge_transcripts.csv", row.names = FALSE)
+
+# TODO: remove after combining with final results
 write.csv(results_transcripts, "results/dge.csv", row.names = FALSE)
+
+# get diff expr for exon-level features
+results_exons <- stattest(bg_obj_filt,
+                          feature="exon",
+                          covariate="condition",
+                          getFC=TRUE)
+
+# add the exon identification
+transcript_names <- transcriptNames(bg_obj_filt)
+transcritp_ids <- transcriptIDs(bg_obj_filt)
+gene_names <- geneNames(bg_obj_filt)
+gene_ids <- geneIDs(bg_obj_filt)
+
+exon_to_gene <- data.frame(transcript_names, transcritp_ids, gene_names, gene_ids)
+
+exon_to_gene$id <- rownames(exon_to_gene)
+rownames(exon_to_gene) = NULL
+
+results_exons <- merge(exon_to_gene, results_exons, by="id")
+
+# write final exon table
+write.csv(results_exons, "results/dge_exons.csv", row.names = FALSE)
 
 # get transcript-level FPKM values and coordenates
 texpr <- texpr(bg_obj_filt, meas = "all")

@@ -15,5 +15,5 @@ https://epd.expasy.org/epd/ucsc/epdHub/dm6/All_CAGE_plus.bw
 https://epd.expasy.org/epd/ucsc/epdHub/dm6/All_CAGE_minus.bw
 https://epd.epfl.ch/ucsc/epdHub/dm6/GSM480156_dm3-S2-H3K4me3.bw
 https://epd.epfl.ch/ucsc/epdHub/dm6/GSM480159_dm3-S2-PolII.bw
-http://expdata.cmmt.ubc.ca/JASPAR/downloads/UCSC_tracks/2022/JASPAR2022_dm6.bb
-http://hgdownload.soe.ucsc.edu/gbdb/dm6/bbi/gc5BaseBw/gc5Base.bw
+https://unibind.uio.no/static/data/20220914/UniBind_hubs_Robust/UCSC/dm6/dm6_UniBind_allTFBSs.bb
+https://hgdownload.soe.ucsc.edu/gbdb/dm6/bbi/gc5BaseBw/gc5Base.bw

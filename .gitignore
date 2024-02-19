@@ -3,3 +3,4 @@ genome/
 .vscode/
 *.bb
 *.bw
+.idea/*
