@@ -4,3 +4,4 @@ genome/
 *.bb
 *.bw
 .idea/*
+**new-tests
