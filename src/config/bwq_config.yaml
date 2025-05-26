@@ -1,0 +1,79 @@
+- path: https://hgdownload.soe.ucsc.edu/gbdb/dm6/bbi/gc5BaseBw/gc5Base.bw 
+  stats:
+    - stat: mean
+      name: mean_gc
+
+- path: https://unibind.uio.no/static/data/20220914/UniBind_hubs_Robust/UCSC/dm6/dm6_UniBind_allTFBSs.bb
+  stats:
+    - stat: coverage
+      name: cov_tfbs
+    - stat: max
+      name: max_tfbs
+
+- path: https://remap.univ-amu.fr/storage/public/hubReMap2022/dm6/bigBed/remap2022_all_macs2_dm6_v1_0.bb
+  stats:
+    - stat: coverage
+      name: cov_remap
+    - stat: max
+      name: max_remap
+
+- path: https://epd.expasy.org/epd/ucsc/epdHub/dm6/All_CAGE_plus.bw
+  stats:
+    - stat: coverage
+      name: cov_tss_plus
+    - stat: max
+      name: max_tss_plus
+    - stat: sum
+      name: sum_tss_plus
+
+- path: https://epd.expasy.org/epd/ucsc/epdHub/dm6/All_CAGE_minus.bw
+  stats:
+    - stat: coverage
+      name: cov_tss_minus
+    - stat: min
+      name: min_tss_minus
+    - stat: sum
+      name: sum_tss_minus
+
+- path: https://epd.expasy.org/epd/ucsc/epdHub/dm6/GSM480159_dm3-S2-PolII.bw
+  stats:
+    - stat: coverage
+      name: cov_s2_pol2
+    - stat: sum
+      name: sum_s2_pol2
+    - stat: max
+      name: max_s2_pol2
+
+- path: https://epd.expasy.org/epd/ucsc/epdHub/dm6/GSM480156_dm3-S2-H3K4me3.bw
+  stats:
+    - stat: coverage
+      name: cov_h3k4me3
+    - stat: mean
+      name: mean_h3k4me3
+    - stat: sum
+      name: sum_h3k4me3
+
+- path: https://epd.expasy.org/ftp/epdnew/drosophila/005/Dm_EPDnew_005_dm6.bb
+  stats:
+    - stat: coverage
+      name: cov_epdnew
+    - stat: max
+      name: max_epdnew
+    
+- path: https://hgdownload.soe.ucsc.edu/goldenPath/dm6/phastCons27way/dm6.27way.phastCons.bw
+  stats:
+    - stat: mean
+      name: mean_pcons27
+    - stat: std
+      name: std_pcons27
+    - stat: sum
+      name: sum_pcons27
+
+- path: https://hgdownload.soe.ucsc.edu/goldenPath/dm6/phyloP124way/dm6.phyloP124way.bw
+  stats:
+    - stat: mean
+      name: mean_phylocons124
+    - stat: std
+      name: std__phylocons124
+    - stat: sum
+      name: sum__phylocons124

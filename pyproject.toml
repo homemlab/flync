@@ -5,8 +5,11 @@ requires-python = ">=3.10"
 dependencies = [
     "biopython>=1.85",
     "cpat>=3.0.5",
-    "numpy>=2.2.5",
+    "imbalanced-learn>=0.13.0",
+    "joblib>=1.5.0",
+    "numpy>=2.2.6",
     "pandas>=2.2.3",
+    "protobuf>=6.31.0",
     "pyarrow>=20.0.0",
     "pybigwig>=0.3.24",
     "pyfaidx>=0.8.1.4",
@@ -14,9 +17,13 @@ dependencies = [
     "pyyaml>=6.0.2",
     "scipy>=1.15.3",
     "viennarna>=2.7.0",
+    "xgboost>=3.0.1",
 ]
 
 [dependency-groups]
 dev = [
     "jupyter>=1.1.1",
+    "lazypredict>=0.2.16",
+    "mlflow>=3.0.0rc3",
+    "protobuf>=6.31.0",
 ]

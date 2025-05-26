@@ -1,0 +1,16 @@
+artifact_location: /home/chlab/flync/src/experiments/artifacts/0/models/m-4802d9955e734d01b341bf1fbca9c1c7/artifacts
+creation_timestamp: 1747924459116
+experiment_id: '0'
+last_updated_timestamp: 1747924462081
+model_id: m-4802d9955e734d01b341bf1fbca9c1c7
+model_type: ''
+name: rf_model
+params:
+  class_weight: balanced
+  max_depth: '10'
+  n_estimators: '100'
+  n_jobs: '16'
+  random_state: '99'
+source_run_id: e2000d3d4be144a09f4cb7c1c49d431a
+status: 2
+status_message: null
