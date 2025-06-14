@@ -5,3 +5,4 @@ genome/
 *.bw
 .idea/*
 **new-tests
+**.parquet
