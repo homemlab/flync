@@ -1,0 +1,51 @@
+name: flync
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Python runtime
+  - python>=3.8
+  - pip
+  
+  # Core Python packages
+  - click>=8.0.0
+  - pydantic>=2.0.0
+  - pyyaml>=6.0
+  - pandas>=1.5.0
+  - numpy>=1.21.0
+  - scikit-learn>=1.0.0
+  - rich>=12.0.0
+  - typer>=0.9.0
+  - requests>=2.28.0
+  - biopython>=1.80
+  - pysam>=0.20.0
+  
+  # Required bioinformatics tools
+  - hisat2>=2.2.0
+  - stringtie>=2.2.0
+  - gffread>=0.12.0
+  
+  # Optional but recommended tools
+  - samtools>=1.15
+  - bedtools>=2.30
+  - sra-tools>=3.0.0
+  
+  # R and packages for differential expression
+  - r-base>=4.0
+  - r-ballgown
+  - r-genefilter
+  
+  # Utilities
+  - wget
+  - curl
+  - gzip
+  
+  # Development tools (optional)
+  - pytest>=7.0.0
+  - black>=22.0.0
+  - isort>=5.10.0
+  
+  # Pip-only packages
+  - pip:
+    - CPAT>=3.0.0  # Coding probability assessment tool

@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flync"
+version = "2.0.0"
+description = "FLYNC - FLY Non-Coding gene discovery & classification"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Ricardo F. dos Santos", email = "ricardo.santos@nms.unl.pt"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.8"
+dependencies = [
+    # Core Python dependencies
+    "click>=8.0.0",
+    "pydantic>=2.0.0", 
+    "pyyaml>=6.0",
+    "pandas>=1.5.0",
+    "numpy>=1.21.0",
+    "scikit-learn>=1.0.0",
+    "rich>=12.0.0",
+    "typer>=0.9.0",
+    "requests>=2.28.0",
+    
+    # Bioinformatics dependencies (Linux/macOS only - install manually on Windows)
+    "biopython>=1.80; sys_platform != 'win32'",  # For FASTA/GTF parsing
+    "pysam>=0.20.0; sys_platform != 'win32'",    # For BAM/SAM handling (if needed)
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "flake8>=5.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/homemlab/flync"
+Repository = "https://github.com/homemlab/flync"
+Issues = "https://github.com/homemlab/flync/issues"
+
+[project.scripts]
+flync = "flync.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+flync = [
+    "data/model/*",
+    "data/model/lncrna/*", 
+    "data/model/not_lncrna/*",
+    "data/static/*",
+    "legacy/*"
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

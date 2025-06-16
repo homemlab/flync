@@ -1,0 +1,27 @@
+dry_run: false
+genome:
+  custom_annotation: null
+  custom_genome: null
+  download_if_missing: true
+  release: BDGP6.32
+  species: drosophila
+input:
+  fastq_dir: null
+  metadata: null
+  paired_end: false
+  sra_list: null
+memory_gb: 8
+output:
+  keep_intermediate_files: false
+  log_level: INFO
+  output_dir: ./flync_results
+resume: false
+threads: 2
+tools:
+  feature_extraction_threads: 1
+  hisat2_extra_args: ''
+  hisat2_threads: 1
+  ml_model_path: null
+  prediction_threshold: 0.5
+  stringtie_extra_args: ''
+  stringtie_threads: 1
