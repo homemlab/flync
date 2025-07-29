@@ -113,8 +113,8 @@ def prep_training_data(
     cols_to_keep = ['id', 'MFE', 'Structure']
     mfe = mfe[cols_to_keep]
     mfe.rename(columns={
-        'MFE': 'vrna_mfe',
-        'Structure': 'vrna_structure'
+        'MFE': 'ss_mfe',
+        'Structure': 'ss_structure'
     }, inplace=True)
     df = df.merge(mfe, how='inner', left_on=['id'], right_on=['id'])
     del mfe

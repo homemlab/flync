@@ -1,29 +1,36 @@
 [project]
 name = "flync"
 version = "1.0.0"
-requires-python = ">=3.10"
+requires-python = ">=3.9,<3.10"
 dependencies = [
     "biopython>=1.85",
     "cpat>=3.0.5",
-    "imbalanced-learn>=0.13.0",
-    "joblib>=1.5.0",
-    "numpy>=2.2.6",
-    "pandas>=2.2.3",
-    "protobuf>=6.31.0",
-    "pyarrow>=20.0.0",
+    "imbalanced-learn>=0.12.4",
+    "interpret>=0.7.1",
+    "joblib>=1.5.1",
+    "lightgbm>=4.6.0",
+    "numpy<2",
+    "pandas>=2.3.1",
+    "plotly>=6.2.0",
+    "pyarrow>=14.0.2",
     "pybigwig>=0.3.24",
+    "pyensembl>=2.3.13",
     "pyfaidx>=0.8.1.4",
     "pyranges>=0.1.4",
     "pyyaml>=6.0.2",
-    "scipy>=1.15.3",
-    "viennarna>=2.7.0",
-    "xgboost>=3.0.1",
+    "scikit-learn>=1.6.1",
+    "scipy>=1.13.1",
+    "tqdm>=4.67.1",
+    "xgboost>=2.1.4",
 ]
 
 [dependency-groups]
 dev = [
+    "gunicorn>=23.0.0",
     "jupyter>=1.1.1",
     "lazypredict>=0.2.16",
-    "mlflow>=3.0.0rc3",
-    "protobuf>=6.31.0",
+    "optuna>=4.4.0",
+    "optuna-dashboard>=0.19.0",
+    "optuna-fast-fanova>=0.0.4",
+    "protobuf>=6.31.1",
 ]

@@ -8,7 +8,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from contextlib import ExitStack
 from functools import partial
 
@@ -150,6 +150,19 @@ class BigWigFileManager:
         is_url = parsed_url.scheme in ("http", "https", "ftp")
 
         if is_url:
+            persistent_path = self._get_persistent_cache_path(file_path)
+            # If persistent cache file exists, open it directly (skip waiting for download)
+            if os.path.exists(persistent_path):
+                try:
+                    bw = self.exit_stack.enter_context(pyBigWig.open(persistent_path))
+                    with self.handle_lock:
+                        self.file_handles[file_path] = bw
+                    logging.debug(f"Using existing persistent cached file: {persistent_path} for {file_path}")
+                    return bw
+                except Exception as e:
+                    logging.error(f"Error opening cached file {persistent_path} for {file_path}: {e}")
+                    # If cache file is corrupted, fallback to download logic below
+
             # For URLs, we need to handle downloading with thread safety
             with self.download_lock:
                 if file_path in self.file_handles: # Double check, might have been opened by another thread
@@ -178,6 +191,17 @@ class BigWigFileManager:
             if is_being_downloaded_by_other:
                 max_wait_attempts = 60 # e.g., 30 seconds if sleep is 0.5s
                 for attempt in range(max_wait_attempts):
+                    # If persistent cache file now exists (created by another thread), open it directly
+                    if os.path.exists(persistent_path):
+                        try:
+                            bw = self.exit_stack.enter_context(pyBigWig.open(persistent_path))
+                            with self.handle_lock:
+                                self.file_handles[file_path] = bw
+                            logging.debug(f"Using existing persistent cached file: {persistent_path} for {file_path}")
+                            return bw
+                        except Exception as e:
+                            logging.error(f"Error opening cached file {persistent_path} for {file_path}: {e}")
+                            break
                     logging.debug(f"Waiting for {file_path} (attempt {attempt+1}/{max_wait_attempts}) to be downloaded by another thread.")
                     time.sleep(0.5)  # Short wait
                     with self.handle_lock:
@@ -205,15 +229,15 @@ class BigWigFileManager:
                     self.downloading.add(file_path)
 
 
-                if self.keep_downloaded_files:
-                    persistent_path = self._get_persistent_cache_path(file_path)
-                    if os.path.exists(persistent_path):
-                        logging.info(f"Using existing persistent cached file: {persistent_path} for {file_path}")
-                        actual_file_to_open = persistent_path
-                    else:
-                        logging.info(f"Downloading {file_path} to persistent cache: {persistent_path}")
-                        actual_file_to_open = self._perform_download(file_path, persistent_path)
-                else: # Not keeping files, download to a true temporary file
+                # Always check persistent cache first, regardless of keep_downloaded_files setting.
+                persistent_path = self._get_persistent_cache_path(file_path)
+                if os.path.exists(persistent_path):
+                    logging.debug(f"Using existing persistent cached file: {persistent_path} for {file_path}")
+                    actual_file_to_open = persistent_path
+                elif self.keep_downloaded_files:
+                    logging.info(f"Downloading {file_path} to persistent cache: {persistent_path}")
+                    actual_file_to_open = self._perform_download(file_path, persistent_path)
+                else: # Not keeping files, and not in cache, so download to a transient temp file
                     temp_fd, temp_path_for_download = tempfile.mkstemp(
                         suffix=os.path.splitext(file_path)[1] or ".bwqtmp", # Ensure suffix
                         dir=self.transient_temp_dir
@@ -291,14 +315,30 @@ class BigWigFileManager:
             return 0
 
         logging.info(f"Attempting to preload {len(remote_urls)} remote files...")
-        # Use a temporary ThreadPoolExecutor for preloading if many files
-        # For simplicity here, sequential preloading. Can be parallelized if needed.
-        for url in remote_urls:
-            if self.get_file_handle(url) is not None:
-                success_count += 1
-            else:
-                logging.warning(f"Failed to preload remote file: {url}")
-
+        
+        # Parallel preloading for better performance
+        if len(remote_urls) > 1:
+            max_preload_workers = min(len(remote_urls), 4)  # Limit concurrent downloads
+            with ThreadPoolExecutor(max_workers=max_preload_workers) as preload_executor:
+                preload_futures = {preload_executor.submit(self.get_file_handle, url): url 
+                                 for url in remote_urls}
+                
+                for future in as_completed(preload_futures):
+                    url = preload_futures[future]
+                    try:
+                        if future.result() is not None:
+                            success_count += 1
+                        else:
+                            logging.warning(f"Failed to preload remote file: {url}")
+                    except Exception as e:
+                        logging.warning(f"Failed to preload remote file {url}: {e}")
+        else:
+            # Single file - no need for thread pool overhead
+            for url in remote_urls:
+                if self.get_file_handle(url) is not None:
+                    success_count += 1
+                else:
+                    logging.warning(f"Failed to preload remote file: {url}")
 
         logging.info(f"Preloaded {success_count}/{len(remote_urls)} remote files")
         return success_count
@@ -429,6 +469,23 @@ def load_config_from_yaml(yaml_path):
             raise ValueError(f"Item #{i+1} in config has invalid or missing 'path'.")
 
         file_path = item["path"]
+        
+        # Parse optional range expansion parameters
+        upstream = item.get("upstream", 0)  # Default to 0 (no expansion)
+        downstream = item.get("downstream", 0)  # Default to 0 (no expansion)
+        
+        # Validate expansion parameters
+        if not isinstance(upstream, int) or upstream < 0:
+            logging.warning(
+                f"Invalid 'upstream' value in config item #{i+1}: {upstream}. Must be a non-negative integer. Using 0."
+            )
+            upstream = 0
+        if not isinstance(downstream, int) or downstream < 0:
+            logging.warning(
+                f"Invalid 'downstream' value in config item #{i+1}: {downstream}. Must be a non-negative integer. Using 0."
+            )
+            downstream = 0
+        
         # Path existence for local files is checked by file manager later, but good to warn early if possible
         # if not is_url(file_path) and not os.path.exists(file_path):
         #     logging.warning(
@@ -455,7 +512,13 @@ def load_config_from_yaml(yaml_path):
 
             current_stat = stat_item["stat"]
             current_name = stat_item["name"]
-            config_entry = {"path": file_path, "stat": current_stat, "name": current_name}
+            config_entry = {
+                "path": file_path, 
+                "stat": current_stat, 
+                "name": current_name,
+                "upstream": upstream,
+                "downstream": downstream
+            }
 
             if current_stat in valid_numerical_stats:
                 expanded_configs.append(config_entry)
@@ -584,6 +647,43 @@ def read_ranges_from_bed(bed_file_path):
         logging.error(f"Error manually reading BED file {bed_file_path}: {e}")
         raise IOError(f"Error reading BED file {bed_file_path}: {e}") from e
     return ranges
+
+
+def expand_range(chrom, start, end, upstream, downstream, chrom_len=None):
+    """
+    Expands a genomic range by upstream and downstream amounts.
+    
+    Args:
+        chrom (str): Chromosome name
+        start (int): Original start coordinate (0-based)
+        end (int): Original end coordinate (0-based, exclusive)
+        upstream (int): Number of bases to extend upstream (toward smaller coordinates)
+        downstream (int): Number of bases to extend downstream (toward larger coordinates)
+        chrom_len (int, optional): Length of chromosome for bounds checking
+        
+    Returns:
+        tuple: (expanded_start, expanded_end) with bounds checking applied
+    """
+    # Apply expansion
+    expanded_start = start - upstream  # Subtract from start (upstream = toward smaller coordinates)
+    expanded_end = end + downstream    # Add to end (downstream = toward larger coordinates)
+    
+    # Apply bounds checking
+    expanded_start = max(0, expanded_start)  # Ensure start is not negative
+    
+    if chrom_len is not None:
+        expanded_end = min(chrom_len, expanded_end)  # Ensure end doesn't exceed chromosome length
+    
+    # Ensure start < end after expansion
+    if expanded_start >= expanded_end:
+        logging.debug(
+            f"Range expansion resulted in invalid range for {chrom}:{start}-{end} "
+            f"(upstream={upstream}, downstream={downstream}): "
+            f"expanded to {expanded_start}-{expanded_end}. Using original range."
+        )
+        return start, end
+    
+    return expanded_start, expanded_end
 
 
 def calculate_bb_stats(bb_file, chrom, start, end, summary_type="coverage"):
@@ -753,7 +853,7 @@ def get_bigbed_entry_names(bb_file, chrom, start, end, name_field_index):
 def process_single_range(range_tuple, file_configs, file_manager):
     """
     Worker function executed by threads to process a single genomic range.
-    Now supports extracting names from BigBed files.
+    Now supports extracting names from BigBed files and range expansion.
     """
     chrom, start, end, range_name = range_tuple # Unpack range_name (from input BED)
     range_results = {"chromosome": chrom, "start": start, "end": end, "name": range_name} # Add input range_name
@@ -763,6 +863,8 @@ def process_single_range(range_tuple, file_configs, file_manager):
         file_path = config["path"]
         stat_type = config["stat"]
         col_name = config["name"] # This is the output column name
+        upstream = config.get("upstream", 0)
+        downstream = config.get("downstream", 0)
         value = np.nan # Default to NaN
 
         bw = file_manager.get_file_handle(file_path)
@@ -782,15 +884,29 @@ def process_single_range(range_tuple, file_configs, file_manager):
                 # value remains np.nan
             else:
                 chrom_len = file_chroms[chrom]
-                # Effective query region, clipped to chromosome bounds
-                query_start = max(0, start) # Ensure query_start is not negative
-                query_end = min(end, chrom_len)
+                
+                # Apply range expansion if specified
+                if upstream > 0 or downstream > 0:
+                    expanded_start, expanded_end = expand_range(
+                        chrom, start, end, upstream, downstream, chrom_len
+                    )
+                    logging.debug(
+                        f"Expanded range {chrom}:{start}-{end} by upstream={upstream}, downstream={downstream} "
+                        f"to {chrom}:{expanded_start}-{expanded_end} for {file_path}"
+                    )
+                else:
+                    expanded_start, expanded_end = start, end
+                
+                # Effective query region, clipped to chromosome bounds (additional safety check)
+                query_start = max(0, expanded_start)
+                query_end = min(expanded_end, chrom_len)
 
 
                 if query_start >= query_end: # If range is outside chrom or invalid after clipping
+                    expansion_info = f" (expanded from {start}-{end} by upstream={upstream}, downstream={downstream})" if (upstream > 0 or downstream > 0) else ""
                     logging.debug(
                         f"Effective query range [{query_start}-{query_end}) is invalid for chromosome '{chrom}' (len {chrom_len}) "
-                        f"in {file_path} for input range {chrom}:{start}-{end}. Setting {col_name} to NaN."
+                        f"in {file_path} for input range {chrom}:{start}-{end}{expansion_info}. Setting {col_name} to NaN."
                     )
                     # value remains np.nan
                 else:
@@ -858,6 +974,75 @@ def process_single_range(range_tuple, file_configs, file_manager):
     return range_results
 
 
+def process_range_batch(range_batch, file_configs, file_manager):
+    """
+    Process a batch of ranges to reduce threading overhead for small ranges.
+    """
+    batch_results = []
+    for range_tuple in range_batch:
+        result = process_single_range(range_tuple, file_configs, file_manager)
+        if result:
+            batch_results.append(result)
+    return batch_results
+
+
+def process_range_batch_with_local_manager(
+    range_batch, 
+    file_configs, 
+    url_timeout=30, 
+    max_retries=3, 
+    verify_ssl=True, 
+    keep_downloaded_files=False, 
+    base_storage_directory=None
+):
+    """
+    Process a batch of ranges with a local file manager for process-based parallelization.
+    """
+    # Create a local file manager for this process
+    local_file_manager = BigWigFileManager(
+        url_timeout=url_timeout,
+        max_retries=max_retries,
+        verify_ssl=verify_ssl,
+        keep_downloaded_files=keep_downloaded_files,
+        base_storage_directory=base_storage_directory
+    )
+    
+    try:
+        return process_range_batch(range_batch, file_configs, local_file_manager)
+    finally:
+        # Clean up local file manager
+        local_file_manager.close_all()
+
+
+def process_single_range_with_local_manager(
+    range_tuple, 
+    file_configs, 
+    url_timeout=30, 
+    max_retries=3, 
+    verify_ssl=True, 
+    keep_downloaded_files=False, 
+    base_storage_directory=None
+):
+    """
+    Worker function for process-based parallelization.
+    Each process creates its own file manager to avoid sharing issues.
+    """
+    # Create a local file manager for this process
+    local_file_manager = BigWigFileManager(
+        url_timeout=url_timeout,
+        max_retries=max_retries,
+        verify_ssl=verify_ssl,
+        keep_downloaded_files=keep_downloaded_files,
+        base_storage_directory=base_storage_directory
+    )
+    
+    try:
+        return process_single_range(range_tuple, file_configs, local_file_manager)
+    finally:
+        # Clean up local file manager
+        local_file_manager.close_all()
+
+
 def query_bigwig_files(
     ranges,
     file_configs,
@@ -869,10 +1054,20 @@ def query_bigwig_files(
     preload_files=True,
     keep_downloaded_files=False,
     clear_cache_on_startup=False,
-    base_storage_directory=None
+    base_storage_directory=None,
+    use_processes=True,
+    batch_size=None
 ):
     """
     Queries multiple BigWig/BigBed files over specified genomic ranges using parallel processing.
+    
+    Args:
+        use_processes (bool): If True, use ProcessPoolExecutor for better parallelization.
+                             If False, use ThreadPoolExecutor (limited by Python's GIL).
+                             Defaults to True for optimal performance.
+        batch_size (int): Number of ranges to process in each batch. If None, automatically
+                         calculated based on the number of ranges and workers.
+                         Batching reduces threading overhead for many small ranges.
     """
     if not ranges:
         logging.warning("Input 'ranges' list is empty. Returning empty result.")
@@ -907,22 +1102,101 @@ def query_bigwig_files(
             logging.info(f"Preloading {len(unique_paths)} unique file paths...")
             file_manager.preload_remote_files(unique_paths)
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            worker_func = partial(
-                process_single_range,
-                file_configs=file_configs,
-                file_manager=file_manager,
-            )
-            futures = [executor.submit(worker_func, r) for r in ranges]
-            logging.info(f"Submitted {len(futures)} range queries to {max_workers} workers.")
+        # Choose executor type based on workload characteristics
+        executor_class = ProcessPoolExecutor if use_processes else ThreadPoolExecutor
+        executor_name = "ProcessPoolExecutor" if use_processes else "ThreadPoolExecutor"
+        
+        # Calculate optimal batch size for small ranges
+        if batch_size is None:
+            # Auto-calculate batch size: aim for at least 2x more batches than workers
+            # but don't make batches too small (min 1) or too large (max 50)
+            total_ranges = len(ranges)
+            optimal_batches = max_workers * 2
+            auto_batch_size = max(1, min(50, total_ranges // optimal_batches))
+            batch_size = auto_batch_size if total_ranges > max_workers * 10 else 1
+            
+        # Optimize worker count for I/O vs CPU bound workloads
+        if not use_processes and max_workers > os.cpu_count() * 2:
+            # For I/O-bound work (threads), we can use more workers than CPU cores
+            logging.info(f"I/O-bound workload detected, keeping max_workers at {max_workers}")
+        elif use_processes and max_workers > os.cpu_count():
+            # For CPU-bound work (processes), limit to CPU cores
+            original_workers = max_workers
+            max_workers = os.cpu_count()
+            logging.info(f"CPU-bound workload: reduced max_workers from {original_workers} to {max_workers}")
+            
+        logging.info(f"Using {executor_name} with {max_workers} workers, batch_size={batch_size}")
+
+        # Create batches if batch_size > 1
+        if batch_size > 1:
+            range_batches = [ranges[i:i + batch_size] for i in range(0, len(ranges), batch_size)]
+            logging.info(f"Created {len(range_batches)} batches from {len(ranges)} ranges")
+        else:
+            range_batches = [[r] for r in ranges]  # Each range is its own batch
+
+        with executor_class(max_workers=max_workers) as executor:
+            if use_processes:
+                # For processes, we need to pass file configurations and manager settings
+                # since file handles can't be shared across processes
+                if batch_size > 1:
+                    worker_func = partial(
+                        process_range_batch_with_local_manager,
+                        file_configs=file_configs,
+                        url_timeout=url_timeout,
+                        max_retries=max_retries,
+                        verify_ssl=verify_ssl,
+                        keep_downloaded_files=keep_downloaded_files,
+                        base_storage_directory=base_storage_directory
+                    )
+                else:
+                    worker_func = partial(
+                        process_single_range_with_local_manager,
+                        file_configs=file_configs,
+                        url_timeout=url_timeout,
+                        max_retries=max_retries,
+                        verify_ssl=verify_ssl,
+                        keep_downloaded_files=keep_downloaded_files,
+                        base_storage_directory=base_storage_directory
+                    )
+            else:
+                # For threads, use the shared file manager
+                if batch_size > 1:
+                    worker_func = partial(
+                        process_range_batch,
+                        file_configs=file_configs,
+                        file_manager=file_manager,
+                    )
+                else:
+                    worker_func = partial(
+                        process_single_range,
+                        file_configs=file_configs,
+                        file_manager=file_manager,
+                    )
+            
+            # Submit work (either individual ranges or batches)
+            if batch_size > 1:
+                futures = [executor.submit(worker_func, batch) for batch in range_batches]
+                logging.info(f"Submitted {len(futures)} batch queries to {max_workers} workers.")
+            else:
+                futures = [executor.submit(worker_func, r[0]) for r in range_batches]  # r[0] since each batch has 1 element
+                logging.info(f"Submitted {len(futures)} range queries to {max_workers} workers.")
 
             for i, future in enumerate(as_completed(futures)):
                 try:
                     result = future.result()
-                    if result: # Result is a dictionary
-                        results_list.append(result)
+                    if result:
+                        if batch_size > 1 and isinstance(result, list):
+                            # Result is a list of dictionaries from batch processing
+                            results_list.extend(result)
+                        elif isinstance(result, dict):
+                            # Single result dictionary
+                            results_list.append(result)
                     if (i + 1) % 100 == 0 or (i + 1) == len(futures): # Log progress
-                        logging.info(f"Processed {i + 1}/{len(futures)} ranges...")
+                        if batch_size > 1:
+                            estimated_ranges = (i + 1) * batch_size
+                            logging.info(f"Processed ~{estimated_ranges} ranges in {i + 1}/{len(futures)} batches...")
+                        else:
+                            logging.info(f"Processed {i + 1}/{len(futures)} ranges...")
                 except Exception as e:
                     logging.error(f"Error retrieving result for a range query: {e}", exc_info=True)
     finally:
@@ -943,6 +1217,10 @@ def query_bigwig_files(
     column_order = ["chromosome", "start", "end", "name"] + sorted(list(set(stat_col_names))) # Sort stat cols for consistency
 
     df = pd.DataFrame(results_list)
+
+    # change column name from 'name' to 'transcript_id'
+    if 'name' in df.columns:
+        df.rename(columns={'name': 'transcript_id'}, inplace=True)
     
     # Reorder columns to ensure standard ones are first, followed by dynamic stat columns
     # Some stat_col_names might be missing if all values were NaN and thus column not created by DataFrame constructor.
@@ -1023,7 +1301,9 @@ def process_bigwig_query(
     preload_files=True,
     keep_downloaded_files=False,
     clear_cache_on_startup=False,
-    base_storage_directory=None
+    base_storage_directory=None,
+    use_processes=True,
+    batch_size=None
 ):
     """
     High-level function to coordinate the BigWig/BigBed query process.
@@ -1057,7 +1337,9 @@ def process_bigwig_query(
         preload_files=preload_files,
         keep_downloaded_files=keep_downloaded_files,
         clear_cache_on_startup=clear_cache_on_startup,
-        base_storage_directory=base_storage_directory
+        base_storage_directory=base_storage_directory,
+        use_processes=use_processes,
+        batch_size=batch_size
     )
 
     if output_file and not results_df.empty:
@@ -1091,10 +1373,16 @@ def main():
     parser.add_argument("--keep-downloads", action="store_true", help="Keep downloaded remote files in a persistent cache")
     parser.add_argument("--clear-cache", action="store_true", help="Clear persistent cache before starting")
     parser.add_argument("--base-storage-dir", type=str, default=None, help="Custom base directory for cache/temp files")
+    parser.add_argument("--use-processes", action="store_true", default=True, help="Use ProcessPoolExecutor for better parallelization (default: True)")
+    parser.add_argument("--use-threads", action="store_true", help="Use ThreadPoolExecutor instead of ProcessPoolExecutor (overrides --use-processes)")
+    parser.add_argument("--batch-size", type=int, default=None, help="Number of ranges to process per batch (auto-calculated if not specified)")
     
     args = parser.parse_args()
 
     setup_logging(args.log_level) # Setup logging once here
+
+    # Determine execution mode: processes by default, threads if explicitly requested
+    use_processes = args.use_processes and not args.use_threads
 
     try:
         results = process_bigwig_query(
@@ -1110,7 +1398,9 @@ def main():
             preload_files=not args.disable_preload,
             keep_downloaded_files=args.keep_downloads,
             clear_cache_on_startup=args.clear_cache,
-            base_storage_directory=args.base_storage_dir
+            base_storage_directory=args.base_storage_dir,
+            use_processes=use_processes,
+            batch_size=args.batch_size
         )
 
         if isinstance(results, pd.DataFrame) and results.empty:

@@ -6,3 +6,7 @@ genome/
 .idea/*
 **new-tests
 **.parquet
+**.log
+/mlruns
+**__pycache__
+**.pyc

@@ -511,6 +511,7 @@ def run_cpat_calculation(
             final_df_merged[col_name] = np.nan
     
     final_df_output = final_df_merged[final_columns]
+    final_df_output.columns = [col.lower() for col in final_df_output.columns]  # Ensure all columns are lowercase
 
 
     # 10. Save aggregated results to Parquet
@@ -610,8 +611,8 @@ if __name__ == "__main__":
         logging.info("--- CPAT Aggregated Results Summary ---")
         logging.info(f"Number of transcripts processed: {cpat_results_df.shape[0]}")
         if not cpat_results_df.empty:
-            logging.info(f"Mean Coding Probability: {cpat_results_df['Coding_prob'].mean():.4f}")
-            logging.info(f"Median Coding Probability: {cpat_results_df['Coding_prob'].median():.4f}")
+            logging.info(f"Mean Coding Probability: {cpat_results_df['coding_prob'].mean():.4f}")
+            logging.info(f"Median Coding Probability: {cpat_results_df['coding_prob'].median():.4f}")
             logging.info("First 5 rows of the result:")
             # Still use print for DataFrame display since logging doesn't handle it well
             print(cpat_results_df.head().to_string())

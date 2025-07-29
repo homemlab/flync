@@ -1,29 +1,34 @@
-- path: https://hgdownload.soe.ucsc.edu/gbdb/dm6/bbi/gc5BaseBw/gc5Base.bw 
+- path: https://hgdownload.soe.ucsc.edu/gbdb/dm6/bbi/gc5BaseBw/gc5Base.bw
   stats:
     - stat: mean
       name: mean_gc
 
-- path: https://unibind.uio.no/static/data/20220914/UniBind_hubs_Robust/UCSC/dm6/dm6_UniBind_allTFBSs.bb
+- path: http://expdata.cmmt.ubc.ca/JASPAR/downloads/UCSC_tracks/2022/JASPAR2022_dm6.bb
+  upstream: 500      # Look for TFBS 500bp upstream (promoter region)
+  downstream: 50     # Look for TFBS 50bp downstream
   stats:
-    - stat: extract_names
-      name: entries_tfbs      # This will be the column header for the protein names
-      name_field_index: 3       # Optional: 0-indexed field for the name in BED entry (default is 3)
+    # - stat: extract_names
+    #   name: entries_tfbs      # This will be the column header for the item names
+    #   name_field_index: 3       # Optional: 0-indexed field for the name in BED entry (default is 3)
     - stat: coverage
       name: cov_tfbs
     - stat: max
       name: max_tfbs
 
 - path: https://remap.univ-amu.fr/storage/public/hubReMap2022/dm6/bigBed/remap2022_all_macs2_dm6_v1_0.bb
+  upstream: 500
+  downstream: 50
   stats:
-    - stat: extract_names
-      name: entries_remap      # This will be the column header for the protein names
-      name_field_index: 4       # Optional: 0-indexed field for the name in BED entry (default is 3)
+    # - stat: extract_names
+    #   name: entries_remap
+    #   name_field_index: 6
     - stat: coverage
       name: cov_remap
     - stat: max
       name: max_remap
 
 - path: https://epd.expasy.org/epd/ucsc/epdHub/dm6/All_CAGE_plus.bw
+  upstream: 50
   stats:
     - stat: coverage
       name: cov_tss_plus
@@ -33,6 +38,7 @@
       name: sum_tss_plus
 
 - path: https://epd.expasy.org/epd/ucsc/epdHub/dm6/All_CAGE_minus.bw
+  downstream: 50
   stats:
     - stat: coverage
       name: cov_tss_minus
@@ -51,6 +57,8 @@
       name: max_s2_pol2
 
 - path: https://epd.expasy.org/epd/ucsc/epdHub/dm6/GSM480156_dm3-S2-H3K4me3.bw
+  upstream: 500
+  downstream: 50
   stats:
     - stat: coverage
       name: cov_h3k4me3
@@ -60,11 +68,13 @@
       name: sum_h3k4me3
 
 - path: https://epd.expasy.org/ftp/epdnew/drosophila/005/Dm_EPDnew_005_dm6.bb
+  upstream: 500
   stats:
     - stat: coverage
       name: cov_epdnew
-    - stat: max
-      name: max_epdnew
+    # - stat: extract_names
+    #   name: entries_epdnew      # This will be the column header for the protein names
+    #   name_field_index: 0 
     
 - path: https://hgdownload.soe.ucsc.edu/goldenPath/dm6/phastCons27way/dm6.27way.phastCons.bw
   stats:
