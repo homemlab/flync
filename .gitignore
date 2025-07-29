@@ -10,3 +10,5 @@ genome/
 /mlruns
 **__pycache__
 **.pyc
+**.env
+**.venv
