@@ -14,13 +14,17 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Callable, Optional, Union
 import warnings
+import seaborn as sns
+import matplotlib.pyplot as plt
+import io
 
 try:
-    import matplotlib.pyplot as plt
+    import optuna
     import mlflow
     import mlflow.sklearn
+    import mlflow.data
+    from mlflow.data.pandas_dataset import PandasDataset
     import numpy as np
-    import optuna
     import pandas as pd
     import xgboost as xgb
     import lightgbm as lgb
@@ -58,6 +62,43 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class FeatureAnalyzer:
+    """
+    A class to analyze features, compute a correlation matrix, identify highly
+    correlated features, and suggest a list of features to drop.
+    """
+    @staticmethod
+    def analyze_and_log_correlation(X_train: pd.DataFrame, threshold: float, output_dir: Path = None) -> List[str]:
+        """
+        Calculates the correlation matrix, logs it directly to MLflow, and returns features to drop.
+        """
+        logger.info(f"Starting feature correlation analysis with threshold > {threshold}...")
+        corr_matrix = X_train.corr().abs()
+
+        # Plotting the heatmap
+        fig, ax = plt.subplots(figsize=(20, 20))
+        sns.heatmap(corr_matrix, cmap='viridis', annot=False, ax=ax)
+        ax.set_title('Feature Correlation Matrix')
+        
+        # Log figure directly to MLflow (more reliable than file-based logging)
+        mlflow.log_figure(fig, "feature_analysis/feature_correlation_matrix.png")
+        plt.close(fig)
+        logger.info(f"Correlation matrix plot logged to MLflow.")
+
+        # Identify and get list of highly correlated features
+        upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+        features_to_drop = [column for column in upper_tri.columns if any(upper_tri[column] > threshold)]
+        
+        logger.info(f"Identified {len(features_to_drop)} features to drop.")
+        
+        # Create the list of features to drop as text and log it directly to MLflow
+        features_text = '\n'.join(features_to_drop) if features_to_drop else "No features to drop"
+        mlflow.log_text(features_text, "feature_analysis/dropped_features_correlated.txt")
+        logger.info(f"List of features to drop logged to MLflow.")
+        
+        return features_to_drop
+
+
 class DataLoader:
     """Handles loading and validation of datasets."""
     
@@ -80,6 +121,91 @@ class DataLoader:
         except Exception as e:
             logger.error(f"Error loading datasets: {e}")
             raise
+    
+    @staticmethod
+    def create_mlflow_datasets(train_df: pd.DataFrame, test_df: pd.DataFrame, 
+                              holdout_df: pd.DataFrame, train_path: str, test_path: str, 
+                              holdout_path: str, target_column: str, dataset_version: str = None, 
+                              dataset_suffix: str = None) -> Tuple[PandasDataset, ...]:
+        """Create MLflow Dataset objects for proper dataset tracking."""
+        
+        # Create dataset metadata
+        base_name = dataset_suffix or "training_dataset"
+        version_number = dataset_version or "v1.0"
+        
+        logger.debug(f"Creating MLflow datasets with base name: {base_name}")
+        logger.debug(f"Using dataset version number: {version_number}")
+        logger.debug(f"Using target column: {target_column}")
+        
+        # Validate target column exists in datasets
+        if target_column not in train_df.columns:
+            logger.warning(f"Target column '{target_column}' not found in train dataset. Available columns: {list(train_df.columns)}")
+            target_column = None
+        
+        try:
+            # Try the newer MLflow API with version parameter
+            train_dataset = mlflow.data.from_pandas(
+                train_df,
+                source=train_path,
+                name=f"{base_name}_train",
+                version=version_number,
+                targets=target_column
+            )
+            
+            test_dataset = mlflow.data.from_pandas(
+                test_df,
+                source=test_path,
+                name=f"{base_name}_test", 
+                version=version_number,
+                targets=target_column
+            )
+            
+            holdout_dataset = mlflow.data.from_pandas(
+                holdout_df,
+                source=holdout_path,
+                name=f"{base_name}_holdout",
+                version=version_number,
+                targets=target_column
+            )
+            
+            logger.info(f"Created MLflow datasets with version number: {version_number}")
+            
+        except TypeError as e:
+            if "version" in str(e):
+                logger.warning(f"MLflow version doesn't support 'version' parameter: {e}")
+                logger.info("Falling back to basic dataset creation without version parameter")
+                
+                # Fallback to older MLflow API without version parameter
+                train_dataset = mlflow.data.from_pandas(
+                    train_df,
+                    source=train_path,
+                    name=f"{base_name}_train",
+                    targets=target_column
+                )
+                
+                test_dataset = mlflow.data.from_pandas(
+                    test_df,
+                    source=test_path,
+                    name=f"{base_name}_test", 
+                    targets=target_column
+                )
+                
+                holdout_dataset = mlflow.data.from_pandas(
+                    holdout_df,
+                    source=holdout_path,
+                    name=f"{base_name}_holdout",
+                    targets=target_column
+                )
+                
+                logger.info(f"Created MLflow datasets (without version) - dataset_version will be logged as tag: {version_number}")
+            else:
+                raise e
+                
+        except Exception as e:
+            logger.error(f"Error creating MLflow datasets: {e}")
+            raise
+
+        return train_dataset, test_dataset, holdout_dataset
     
     @staticmethod
     def prepare_features_and_targets(df: pd.DataFrame, target_column: str) -> Tuple[pd.DataFrame, pd.Series]:
@@ -310,13 +436,34 @@ class ModelOptimizer:
             raise ValueError(f"Unsupported model type: {self.model_type}")
 
     def objective_function(self, trial: optuna.Trial, X_train: pd.DataFrame, y_train: pd.Series,
-                          X_test: pd.DataFrame, y_test: pd.Series) -> float:
+                          X_test: pd.DataFrame, y_test: pd.Series, 
+                          train_dataset: PandasDataset = None, test_dataset: PandasDataset = None,
+                          dataset_version: str = None, user_tags: Dict[str, str] = None) -> float:
         """Optuna objective function for hyperparameter optimization."""
         params = self.get_hyperparameter_space(trial)
         with mlflow.start_run(nested=True, run_name=f"{self.model_type}_trial_{trial.number}"):
             mlflow.log_params(params)
             mlflow.set_tag("optuna_trial_number", str(trial.number))
             mlflow.set_tag("model_type", self.model_type)
+            
+            # Log all user tags to this trial
+            if user_tags:
+                mlflow.set_tags(user_tags)
+                logger.debug(f"Set user tags for trial {trial.number}: {user_tags}")
+            
+            # Log dataset inputs for this trial
+            if train_dataset:
+                mlflow.log_input(train_dataset, context="training")
+                logger.debug(f"Logged training dataset for trial {trial.number}")
+            if test_dataset:
+                mlflow.log_input(test_dataset, context="testing")
+                logger.debug(f"Logged test dataset for trial {trial.number}")
+            
+            # Log dataset version as tag
+            if dataset_version:
+                mlflow.set_tag("dataset_version", dataset_version)
+            else:
+                mlflow.set_tag("dataset_version", "unknown")
             model = self.create_model(params)
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
@@ -496,7 +643,7 @@ class FeatureImportanceAnalyzer:
     def _create_importance_plot(feat_imp_df: pd.DataFrame, model_type: str, 
                                prefix: str, trial_number: Optional[int] = None) -> None:
         """Create enhanced feature importance plot with percentages."""
-        top_n = min(25, len(feat_imp_df))
+        top_n = min(50, len(feat_imp_df))
         top_features = feat_imp_df.head(top_n)
         
         # Create figure with subplots
@@ -680,6 +827,19 @@ def setup_mlflow(tracking_uri: str, experiment_name: str) -> str:
     return experiment_id
 
 
+def parse_tags(tags_list: List[str]) -> Dict[str, str]:
+    """Parse key=value tag pairs into a dictionary."""
+    tags = {}
+    if tags_list:
+        for tag in tags_list:
+            if '=' in tag:
+                key, value = tag.split('=', 1)  # Split on first '=' only
+                tags[key.strip()] = value.strip()
+            else:
+                logger.warning(f"Invalid tag format: '{tag}'. Expected 'key=value' format.")
+    return tags
+
+
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
     parser = argparse.ArgumentParser(
@@ -722,8 +882,8 @@ def create_argument_parser() -> argparse.ArgumentParser:
     # MLflow arguments
     parser.add_argument("--mlflow-uri", default="sqlite:///mlflow.db",
                        help="MLflow tracking URI")
-    parser.add_argument("--experiment-name", type=str,
-                       help="MLflow experiment name (auto-generated if not provided)")
+    parser.add_argument("--experiment-name", required=True, type=str,
+                       help="MLflow experiment name")
     
     # Other arguments
     parser.add_argument("--random-state", default=42, type=int,
@@ -731,8 +891,26 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project-name", default="ML Hyperparameter Optimization",
                        help="Project name for MLflow tags")
     parser.add_argument("--dataset-version", default="v1.0",
-                       help="Dataset version for MLflow tags")
+                       help="Dataset version number for MLflow dataset version parameter")
+    parser.add_argument("--dataset-suffix", default="training_dataset",
+                       help="Dataset suffix for MLflow tags and base name")
+
+    # Feature Selection Arguments
+    parser.add_argument("--analyze-correlations", action="store_true",
+                       help="If set, analyze and drop highly correlated features before optimization.")
+    parser.add_argument("--correlation-threshold", type=float, default=0.95,
+                       help="Correlation threshold for dropping features.")
+    parser.add_argument("--drop-features-file", type=str,
+                       help="Path to a text file with a list of features to drop (one per line).")
     
+    # New tags argument
+    parser.add_argument("--tags", nargs="+", type=str,
+                       help="Additional tags in key=value format (e.g., --tags experiment_type=test batch_id=001)")
+    
+    # Debug arguments
+    parser.add_argument("--debug", action="store_true",
+                       help="Enable debug logging for detailed troubleshooting")
+
     return parser
 
 
@@ -741,18 +919,32 @@ def main():
     parser = create_argument_parser()
     args = parser.parse_args()
 
-    # Generate experiment name if not provided
-    if not args.experiment_name:
-        metrics_str = "_".join(args.optimization_metrics)
-        args.experiment_name = f"{args.model_type}_{metrics_str}_{args.optimization_direction}_optimization"
+    # Configure logging level based on debug flag
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.debug("Debug logging enabled")
+    
+    # Parse additional tags
+    additional_tags = parse_tags(args.tags) if args.tags else {}
 
     logger.info("Starting hyperparameter optimization...")
     logger.info(f"Configuration: {vars(args)}")
+    logger.debug(f"Python path: {sys.path}")
+    logger.debug(f"MLflow version: {mlflow.__version__}")
 
     try:
         # Load datasets
         train_df, test_df, holdout_df = DataLoader.load_datasets(
             args.train_data, args.test_data, args.holdout_data
+        )
+        logger.debug(f"Loaded datasets - Train: {train_df.shape}, Test: {test_df.shape}, Holdout: {holdout_df.shape}")
+
+        # Create MLflow datasets for proper tracking
+        logger.debug("Creating MLflow datasets...")
+        train_dataset, test_dataset, holdout_dataset = DataLoader.create_mlflow_datasets(
+            train_df, test_df, holdout_df, 
+            args.train_data, args.test_data, args.holdout_data,
+            args.target_column, args.dataset_version, args.dataset_suffix
         )
 
         # Prepare features and targets
@@ -763,141 +955,158 @@ def main():
         # Setup MLflow
         experiment_id = setup_mlflow(args.mlflow_uri, args.experiment_name)
 
-        # Initialize components
-        optimizer = ModelOptimizer(
-            args.model_type, args.optimization_metrics,
-            args.optimization_direction, args.random_state
-        )
-        study_manager = OptunaStudyManager(
-            args.study_name, args.storage_url, args.optimization_direction
-        )
-
-        # Create study
-        study = study_manager.create_study()
-
-        # User tags for MLflow
-        user_tags = {
-            "project_name": args.project_name,
-            "dataset_version": args.dataset_version,
-            "optimization_metrics": ",".join(args.optimization_metrics),
-            "optimization_direction": args.optimization_direction,
-            "model_type": args.model_type,
-            "study_name": args.study_name
-        }
-
         # Main MLflow run
-        with mlflow.start_run(run_name="hyperparameter_optimization_main", experiment_id=experiment_id):
-            logger.info(f"MLflow Run ID: {mlflow.active_run().info.run_id}")
-
-            # Set tags and log parameters
-            mlflow.set_tags(user_tags)
-            mlflow.log_params({
-                "n_trials": args.n_trials,
-                "timeout_seconds": args.timeout,
-                "random_state": args.random_state,
-                "train_size": len(X_train),
-                "test_size": len(X_test),
-                "holdout_size": len(X_holdout)
-            })
-
-            # Run optimization
-            logger.info(f"Starting optimization with {args.n_trials} trials...")
+        with mlflow.start_run(run_name="hyperparameter_optimization_main", experiment_id=experiment_id) as main_run:
+            logger.debug(f"Started main MLflow run: {main_run.info.run_id}")
+            
+            # Log datasets at the main run level
             try:
-                study.optimize(
-                    lambda trial: optimizer.objective_function(trial, X_train, y_train, X_test, y_test),
-                    n_trials=args.n_trials,
-                    timeout=args.timeout,
-                    show_progress_bar=True
-                )
-                mlflow.set_tag("optimization_status", "completed")
+                mlflow.log_input(train_dataset, context="training")
+                mlflow.log_input(test_dataset, context="testing") 
+                mlflow.log_input(holdout_dataset, context="validation")
+                logger.debug("Successfully logged all datasets to main MLflow run")
             except Exception as e:
-                logger.error(f"Optimization failed: {e}")
-                mlflow.set_tag("optimization_status", "failed")
-                raise
-
-            # Log study results
+                logger.warning(f"Failed to log datasets to MLflow: {e}")
+                logger.debug("Continuing without dataset logging...")
+            
+            # Log dataset version as tag for compatibility
+            mlflow.set_tag("dataset_version", args.dataset_version)
+            
+            # --- Feature Selection Step (before optimization) ---
+            features_to_drop = []
+            if args.analyze_correlations:
+                features_to_drop = FeatureAnalyzer.analyze_and_log_correlation(
+                    X_train, args.correlation_threshold, None  # No longer need output_dir
+                )
+            elif args.drop_features_file:
+                logger.info(f"Loading features to drop from {args.drop_features_file}")
+                try:
+                    with open(args.drop_features_file, 'r') as f:
+                        features_to_drop = [line.strip() for line in f if line.strip()]
+                    logger.info(f"Loaded {len(features_to_drop)} features to drop from file")
+                    # Log the drop features file as an artifact
+                    mlflow.log_artifact(args.drop_features_file, "feature_selection")
+                    # Log relevant information
+                    mlflow.log_param("drop_features_file", args.drop_features_file)
+                    mlflow.log_param("num_features_dropped", len(features_to_drop))
+                except Exception as e:
+                    logger.error(f"Error loading features to drop: {e}")
+                    features_to_drop = []
+            
+            # Apply feature selection
+            if features_to_drop:
+                logger.info(f"Dropping {len(features_to_drop)} features before optimization")
+                features_to_drop_in_data = [f for f in features_to_drop if f in X_train.columns]
+                features_not_found = [f for f in features_to_drop if f not in X_train.columns]
+                
+                if features_not_found:
+                    logger.warning(f"Features not found in dataset: {features_not_found}")
+                
+                X_train = X_train.drop(columns=features_to_drop_in_data)
+                X_test = X_test.drop(columns=features_to_drop_in_data)
+                X_holdout = X_holdout.drop(columns=features_to_drop_in_data)
+                
+                logger.info(f"Remaining features after selection: {X_train.shape[1]}")
+                mlflow.log_param("num_features_remaining", X_train.shape[1])
+            
+            # Create optimizer
+            optimizer = ModelOptimizer(
+                args.model_type, args.optimization_metrics,
+                args.optimization_direction, args.random_state
+            )
+            study_manager = OptunaStudyManager(
+                args.study_name, args.storage_url, args.optimization_direction
+            )
+            
+            # Create study
+            study = study_manager.create_study()
+            
+            # Comprehensive user tags for MLflow
+            user_tags = {
+                "project_name": args.project_name,
+                "dataset_version": args.dataset_version,
+                "optimization_metrics": ",".join(args.optimization_metrics),
+                "optimization_direction": args.optimization_direction,
+                "model_type": args.model_type,
+                "study_name": args.study_name,
+                "dataset_suffix": args.dataset_suffix,
+                "random_state": str(args.random_state),
+                "n_trials": str(args.n_trials)
+            }
+            
+            # Add feature selection related tags
+            if args.analyze_correlations:
+                user_tags["analyze_correlations"] = "true"
+                user_tags["correlation_threshold"] = str(args.correlation_threshold)
+            
+            if args.drop_features_file:
+                user_tags["drop_features_file"] = args.drop_features_file
+                user_tags["num_features_dropped_from_file"] = str(len(features_to_drop))
+            
+            user_tags["num_features_used"] = str(X_train.shape[1])
+            
+            # Add any additional user-specified tags
+            user_tags.update(additional_tags)
+            
+            # Log all tags at once
+            mlflow.set_tags(user_tags)
+            logger.debug(f"Set MLflow tags: {user_tags}")
+            
+            # Run optimization
+            objective = lambda trial: optimizer.objective_function(
+                trial, X_train, y_train, X_test, y_test, train_dataset, test_dataset, args.dataset_version, user_tags
+            )
+            
+            study.optimize(objective, n_trials=args.n_trials, timeout=args.timeout)
+            
+            # Log best trial results
+            logger.info("Optimization finished. Logging best trial results...")
             best_trial = study.best_trial
-            logger.info(f"Best trial: {best_trial.number}")
-            logger.info(f"Best value: {best_trial.value:.4f}")
-            logger.info(f"Best params: {best_trial.params}")
+            mlflow.log_params(best_trial.params)
+            mlflow.log_metrics({f"best_{metric}": getattr(best_trial.values[i] if len(best_trial.values) > i else 0, '__float__', lambda: 0)() for i, metric in enumerate(args.optimization_metrics)})
+            mlflow.set_tag("best_trial_number", str(best_trial.number))
+            
+            # Retrain the best model on the full training data and evaluate on holdout set
+            logger.info("Training final model with best parameters on full training set...")
+            best_model = optimizer.create_model(best_trial.params)
+            best_model.fit(X_train, y_train)
+            
+            # Log final model metadata and dataset for final training
+            mlflow.log_param("final_model_trained", True)
+            mlflow.log_param("final_training_samples", len(X_train))
+            mlflow.log_param("final_feature_count", X_train.shape[1])
+            
+            # Log the holdout dataset for final evaluation
+            try:
+                mlflow.log_input(holdout_dataset, context="final_evaluation")
+                logger.debug("Logged holdout dataset for final evaluation")
+            except Exception as e:
+                logger.warning(f"Failed to log holdout dataset: {e}")
+            
+            y_holdout_pred = best_model.predict(X_holdout)
+            if hasattr(best_model, "predict_proba"):
+                y_holdout_pred_proba = best_model.predict_proba(X_holdout)[:, 1]
+            else:
+                y_holdout_pred_proba = y_holdout_pred # For models without predict_proba
 
-            # Log best trial info
-            mlflow.log_params({f"best_{k}": v for k, v in best_trial.params.items()})
-            mlflow.log_metric("best_optimization_score", best_trial.value)
-            mlflow.log_metric("best_trial_number", best_trial.number)
+            holdout_metrics = MetricsCalculator.calculate_metrics(y_holdout, y_holdout_pred, y_holdout_pred_proba)
+            mlflow.log_metrics({f"holdout_{k}": v for k, v in holdout_metrics.items()})
+            
+            # Log curves and confusion matrix for holdout set
+            MetricsCalculator.log_curves_and_confusion(y_holdout, y_holdout_pred, y_holdout_pred_proba, "holdout")
+
+            # Log final feature importance
+            feature_names = X_train.columns.tolist()
+            FeatureImportanceAnalyzer.analyze_and_log(best_model, feature_names, args.model_type, "final")
 
             # Log study visualizations
             study_manager.log_study_visualizations(study)
 
-            # Create feature importance stability analysis
-            FeatureImportanceAnalyzer.create_feature_stability_plot(study, args.model_type)
-
-            # Train final model on full training data
-            logger.info("Training final model on training data...")
-            final_params = best_trial.params.copy()
-            final_params["random_state"] = args.random_state
-            final_model = optimizer.create_model(final_params)
-            final_model.fit(X_train, y_train)
-
-            # Evaluate on test set (log as test_*)
-            logger.info("Evaluating final model on test set...")
-            y_test_pred = final_model.predict(X_test)
-            if hasattr(final_model, "predict_proba"):
-                y_test_pred_proba = final_model.predict_proba(X_test)[:, 1]
-            else:
-                y_test_pred_proba = y_test_pred
-            test_metrics = MetricsCalculator.calculate_metrics(y_test, y_test_pred, y_test_pred_proba)
-            test_metrics_logged = {f"test_{k}": v for k, v in test_metrics.items()}
-            mlflow.log_metrics(test_metrics_logged)
-            MetricsCalculator.log_curves_and_confusion(y_test, y_test_pred, y_test_pred_proba, "test")
-
-            # Evaluate on holdout set (log as holdout_*)
-            logger.info("Evaluating final model on holdout set...")
-            y_holdout_pred = final_model.predict(X_holdout)
-            if hasattr(final_model, "predict_proba"):
-                y_holdout_pred_proba = final_model.predict_proba(X_holdout)[:, 1]
-            else:
-                y_holdout_pred_proba = y_holdout_pred
-            holdout_metrics = MetricsCalculator.calculate_metrics(y_holdout, y_holdout_pred, y_holdout_pred_proba)
-            holdout_metrics_logged = {f"holdout_{k}": v for k, v in holdout_metrics.items()}
-            mlflow.log_metrics(holdout_metrics_logged)
-            MetricsCalculator.log_curves_and_confusion(y_holdout, y_holdout_pred, y_holdout_pred_proba, "holdout")
-
-            # Feature importance analysis for final model
-            feature_names = X_train.columns.tolist() if hasattr(X_train, 'columns') else [f"feature_{i}" for i in range(X_train.shape[1])]
-            FeatureImportanceAnalyzer.analyze_and_log(final_model, feature_names, args.model_type, "final")
-
-            # Save final model
-            logger.info("Saving final model...")
-            from mlflow.models.signature import infer_signature
-            signature = infer_signature(X_train, final_model.predict(X_train))
-            input_example = X_train.head(3) if hasattr(X_train, 'head') else X_train[:3]
-            model_name = f"best_{args.model_type}_model"
-            mlflow.sklearn.log_model(
-                sk_model=final_model,
-                artifact_path=model_name,
-                signature=signature,
-                input_example=input_example,
-                registered_model_name=f"HyperOpt_{args.model_type.title()}_{args.study_name}"
-            )
-
-            # Print summary
-            logger.info("\n" + "="*80)
-            logger.info("OPTIMIZATION COMPLETE")
-            logger.info("="*80)
-            logger.info(f"Best trial number: {best_trial.number}")
-            logger.info(f"Best optimization score: {best_trial.value:.4f}")
-            logger.info("Test set metrics:")
-            for metric, value in test_metrics.items():
-                logger.info(f"  {metric}: {value:.4f}")
-            logger.info("Holdout set metrics:")
-            for metric, value in holdout_metrics.items():
-                logger.info(f"  {metric}: {value:.4f}")
-            logger.info(f"\nMLflow Run ID: {mlflow.active_run().info.run_id}")
-            logger.info(f"To view results: mlflow ui --backend-store-uri {args.mlflow_uri}")
+            logger.info("Script finished successfully!")
 
     except Exception as e:
         logger.error(f"Script execution failed: {e}")
+        logger.debug(f"Full traceback:", exc_info=True)
         sys.exit(1)
 
 

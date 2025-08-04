@@ -7,9 +7,9 @@
   upstream: 500      # Look for TFBS 500bp upstream (promoter region)
   downstream: 50     # Look for TFBS 50bp downstream
   stats:
-    # - stat: extract_names
-    #   name: entries_tfbs      # This will be the column header for the item names
-    #   name_field_index: 3       # Optional: 0-indexed field for the name in BED entry (default is 3)
+    - stat: extract_names
+      name: entries_tfbs      # This will be the column header for the item names
+      name_field_index: 3       # Optional: 0-indexed field for the name in BED entry (default is 3)
     - stat: coverage
       name: cov_tfbs
     - stat: max
@@ -19,9 +19,9 @@
   upstream: 500
   downstream: 50
   stats:
-    # - stat: extract_names
-    #   name: entries_remap
-    #   name_field_index: 6
+    - stat: extract_names
+      name: entries_remap
+      name_field_index: 6
     - stat: coverage
       name: cov_remap
     - stat: max
@@ -72,9 +72,9 @@
   stats:
     - stat: coverage
       name: cov_epdnew
-    # - stat: extract_names
-    #   name: entries_epdnew      # This will be the column header for the protein names
-    #   name_field_index: 0 
+    - stat: extract_names
+      name: entries_epdnew      # This will be the column header for the protein names
+      name_field_index: 0 
     
 - path: https://hgdownload.soe.ucsc.edu/goldenPath/dm6/phastCons27way/dm6.27way.phastCons.bw
   stats:

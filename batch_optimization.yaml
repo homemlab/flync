@@ -1,0 +1,197 @@
+# Batch Optimization Configuration File
+# This file defines multiple dataset configurations for batch hyperparameter optimization
+
+# Global defaults (can be overridden in individual configurations)
+global_defaults:
+  optimization_direction: "maximize"
+  n_trials: 100
+  random_state: 99
+  job_timeout: 3600
+  delay_between_jobs: 30
+  project_name: "ML Hyperparameter Optimization"
+  dataset_version: "v1.0"
+  debug: false
+  dry_run: false
+  parallel: false
+
+# Storage configuration (optional - can be overridden per config)
+storage:
+  mlflow_uri: "sqlite:///mlflow.db"
+  storage_url: "sqlite:///optuna.db"
+
+# Default models and metrics (can be overridden per config)
+default_models: ["randomforest", "xgboost", "lightgbm", "ebm"]
+default_metric_combinations:
+  - ["precision"]
+  - ["f1"]
+  - ["roc_auc"]
+  - ["pr_auc"]
+  - ["precision", "f1"]
+  - ["f1", "roc_auc"]
+  - ["roc_auc", "pr_auc"]
+
+# Dataset configurations - each represents a different dataset with its own parameters
+dataset_configs:
+  
+  # Configuration 1: lncRNA classification dataset
+  lncrna_dataset:
+    name: "lncRNA Classification"
+    description: "Long non-coding RNA classification experiment"
+    
+    # Dataset paths
+    train_data: "model/train_scaled.parquet"
+    test_data: "model/test_scaled.parquet" 
+    holdout_data: "model/holdout_scaled.parquet"
+    target_column: "is_lncrna"
+    dataset_suffix: "lncrna_v2"
+    
+    # Experiment configuration
+    experiment_name: "lncrna_classification_batch"
+    
+    # Override global settings for this dataset
+    n_trials: 150
+    random_state: 42
+    
+    # Feature selection
+    analyze_correlations: true
+    correlation_threshold: 0.95
+    # Alternative: drop_features_file: "features_to_drop.txt"
+    
+    # Tags specific to this dataset
+    tags:
+      dataset_type: "genomics"
+      data_source: "ensembl"
+      feature_types: "sequence_kmer_structure"
+      preprocessing: "scaled"
+      experiment_batch: "batch_001"
+      researcher: "lab_team"
+    
+    # Model/metric overrides (optional)
+    models: ["randomforest", "xgboost", "lightgbm"]  # Skip EBM for this dataset
+    metrics: 
+      - ["precision"]
+      - ["f1"] 
+      - ["roc_auc"]
+      - ["precision", "f1"]
+  
+  # Configuration 2: Same dataset but with different preprocessing
+  lncrna_dataset_raw:
+    name: "lncRNA Classification - Raw Features"
+    description: "Same dataset but without feature scaling"
+    
+    train_data: "model/train_raw.parquet"
+    test_data: "model/test_raw.parquet"
+    holdout_data: "model/holdout_raw.parquet"
+    target_column: "is_lncrna"
+    dataset_suffix: "lncrna_raw"
+    
+    experiment_name: "lncrna_classification_raw_batch"
+    
+    # Different feature selection approach
+    drop_features_file: "config/features_to_drop_raw.txt"
+    
+    # Different tags
+    tags:
+      dataset_type: "genomics"
+      data_source: "ensembl"
+      feature_types: "sequence_kmer_structure"
+      preprocessing: "raw"
+      experiment_batch: "batch_001"
+      researcher: "lab_team"
+      comparison_study: "scaling_effect"
+    
+    # Run only specific models for comparison
+    models: ["randomforest", "xgboost"]
+    metrics:
+      - ["precision"]
+      - ["f1"]
+
+  # Configuration 3: Protein coding gene dataset
+  protein_coding_dataset:
+    name: "Protein Coding Gene Classification"
+    description: "Binary classification of protein coding vs non-coding genes"
+    
+    train_data: "model/protein_train.parquet"
+    test_data: "model/protein_test.parquet"
+    holdout_data: "model/protein_holdout.parquet"
+    target_column: "is_protein_coding"
+    dataset_suffix: "protein_coding"
+    
+    experiment_name: "protein_coding_classification"
+    
+    # More trials for this complex dataset
+    n_trials: 200
+    timeout: 7200  # 2 hours per optimization
+    
+    # No feature selection for this dataset
+    # analyze_correlations: false
+    
+    tags:
+      dataset_type: "genomics"
+      data_source: "gencode"
+      feature_types: "expression_sequence"
+      preprocessing: "normalized"
+      experiment_batch: "batch_002"
+      researcher: "lab_team"
+      gene_biotype: "protein_coding"
+    
+    # Test all models including EBM
+    # models: # Use default (all models)
+    # Use default metric combinations
+
+  # Configuration 4: Small test dataset for debugging
+  debug_dataset:
+    name: "Debug Test Dataset"
+    description: "Small dataset for testing and debugging"
+    
+    train_data: "test/small_train.parquet"
+    test_data: "test/small_test.parquet"
+    holdout_data: "test/small_holdout.parquet"
+    target_column: "label"
+    dataset_suffix: "debug_test"
+    
+    experiment_name: "debug_hyperopt"
+    
+    # Quick runs for debugging
+    n_trials: 5
+    job_timeout: 300  # 5 minutes max per job
+    delay_between_jobs: 5
+    debug: true
+    
+    tags:
+      dataset_type: "test"
+      purpose: "debugging"
+      experiment_batch: "debug"
+      researcher: "dev_team"
+    
+    # Only test one model quickly
+    models: ["randomforest"]
+    metrics:
+      - ["f1"]
+
+# Advanced configurations (optional)
+advanced:
+  # Custom model configurations per dataset
+  custom_model_configs:
+    lncrna_dataset:
+      randomforest:
+        n_trials: 100
+      xgboost:
+        n_trials: 150
+      lightgbm:
+        n_trials: 150
+    
+    protein_coding_dataset:
+      ebm:
+        n_trials: 75  # EBM is slower
+      
+  # Conditional execution rules
+  execution_rules:
+    # Skip EBM if dataset has more than 1000 features
+    skip_ebm_large_datasets: true
+    max_features_for_ebm: 1000
+    
+    # Auto-adjust trials based on dataset size
+    auto_adjust_trials: true
+    min_trials: 50
+    max_trials: 300

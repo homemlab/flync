@@ -7,7 +7,7 @@ import multiprocessing
 import math
 import logging
 import re
-from typing import Tuple
+from typing import Tuple, Union, Optional
 
 # --- Logging Setup ---
 def setup_logging(log_level):
@@ -98,7 +98,7 @@ def get_linearfold_prediction(sequence: str) -> Tuple[str, float]:
     return structure, mfe_value
 
 # --- Helper function for multiprocessing ---
-def get_folding_results_mp_helper_indexed(item: tuple[int, str]) -> tuple[int, float | None, str | None]:
+def get_folding_results_mp_helper_indexed(item: Tuple[int, str]) -> Tuple[int, Union[float, None], Union[str, None]]:
     """
     Calculates Minimum Free Energy (MFE) and RNA secondary structure for a single RNA sequence using LinearFold.
 
@@ -136,7 +136,7 @@ def calculate_all_mfe_and_structure(
     df_to_process: pd.DataFrame, 
     sequence_col: str = 'Sequence',
     include_structure: bool = False,
-    num_processes: int | None = None
+    num_processes: Union[int, None] = None
 ) -> pd.DataFrame:
     """
     Calculates MFE and optionally the secondary structure for sequences in a DataFrame using LinearFold.
@@ -213,7 +213,7 @@ def calculate_all_mfe_and_structure(
     return df_out
 
 
-def load_checkpoint_batch(filename: str, include_structure: bool, sequence_col: str) -> pd.DataFrame | None:
+def load_checkpoint_batch(filename: str, include_structure: bool, sequence_col: str) -> Union[pd.DataFrame, None]:
     """
     Attempts to load and validate a batch file as a checkpoint.
     """
@@ -282,7 +282,7 @@ def process_mfe_calculations(
     sequence_col: str = "Sequence",
     include_structure: bool = False,
     batch_size: int = 0,
-    num_processes: int | None = None
+    num_processes: Union[int, None] = None
 ):
     """
     Core logic for calculating MFE and optionally structure for sequences from an input file.
