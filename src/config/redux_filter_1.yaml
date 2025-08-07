@@ -10,7 +10,7 @@ global_defaults:
   delay_between_jobs: 30
   project_name: "Flync Feature and Hyperparameter Optimization"
   debug: true
-  dry_run: true
+  threads: 20
 
 # Storage configuration (optional - can be overridden per config)
 storage:

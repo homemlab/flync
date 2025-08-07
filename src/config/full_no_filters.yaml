@@ -19,26 +19,26 @@ storage:
   storage_url: "sqlite:///optuna.db"
 
 # Default models and metrics (can be overridden per config)
-default_models: ["randomforest", "xgboost", "lightgbm", "ebm"]
+default_models: ["lightgbm"]
 default_metric_combinations:
   - ["f1"]
 
 # Dataset configurations - each represents a different dataset with its own parameters
 dataset_configs:
   
-  redux_raw:
-    name: "k-mer redux raw dataset"
+  full_raw:
+    name: "k-mer full raw dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No feature selection applied"
     
     # Dataset paths
-    train_data: "src/data/X_train_redux.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
+    train_data: "src/data/X_train_full.parquet"
+    test_data: "src/data/X_test_full.parquet"
+    holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "redux_raw"
+    dataset_suffix: "full_raw"
     
     # Experiment configuration
-    experiment_name: "redux_raw"
+    experiment_name: "full_raw"
     
     # Feature correlation analysis
     #analyze_correlations: true
@@ -51,25 +51,25 @@ dataset_configs:
     # Tags specific to this dataset
     tags:
       dataset_imbalance_technique: "none"
-      dataset_kmer_redux: "true"
+      dataset_kmer_redux: "false"
       features_cpat: "true"
       features_regulators_mhe: "all"
       features_ss: "true"
       features_filter: "none"
   
-  redux_raw_corr:
-    name: "k-mer redux raw dataset with correlation analysis"
+  full_raw_corr:
+    name: "k-mer full raw dataset with correlation analysis"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Automatic correlation analysis applied"
     
     # Dataset paths
-    train_data: "src/data/X_train_redux.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
+    train_data: "src/data/X_train_full.parquet"
+    test_data: "src/data/X_test_full.parquet"
+    holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "redux_raw"
+    dataset_suffix: "full_raw"
     
     # Experiment configuration
-    experiment_name: "redux_raw"
+    experiment_name: "full_raw"
     
     # Feature correlation analysis
     analyze_correlations: true
@@ -79,25 +79,25 @@ dataset_configs:
     # Tags specific to this dataset
     tags:
       dataset_imbalance_technique: "none"
-      dataset_kmer_redux: "true"
+      dataset_kmer_redux: "false"
       features_cpat: "true"
       features_regulators_mhe: "all"
       features_ss: "true"
       features_filter: "none"
 
-  redux_raw_smote:
-    name: "k-mer redux raw SMOTE dataset"
+  full_raw_smote:
+    name: "k-mer full raw SMOTE dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No feature selection applied. SMOTE applied to balance classes."
     
     # Dataset paths
-    train_data: "src/data/X_train_redux_smote.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
+    train_data: "src/data/X_train_full_smote.parquet"
+    test_data: "src/data/X_test_full.parquet"
+    holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "redux_smote"
+    dataset_suffix: "full_smote"
 
     # Experiment configuration
-    experiment_name: "redux_smote"
+    experiment_name: "full_smote"
 
     # Feature correlation analysis
     #analyze_correlations: true
@@ -110,25 +110,25 @@ dataset_configs:
     # Tags specific to this dataset
     tags:
       dataset_imbalance_technique: "smote"
-      dataset_kmer_redux: "true"
+      dataset_kmer_redux: "false"
       features_cpat: "true"
       features_regulators_mhe: "all"
       features_ss: "true"
       features_filter: "none"
 
-  redux_raw_corr_smote:
-    name: "k-mer redux raw SMOTE dataset"
+  full_raw_corr_smote:
+    name: "k-mer full raw SMOTE dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Automatic corelation analysis applied. SMOTE applied to balance classes."
     
     # Dataset paths
-    train_data: "src/data/X_train_redux_smote.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
+    train_data: "src/data/X_train_full_smote.parquet"
+    test_data: "src/data/X_test_full.parquet"
+    holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "redux_smote"
+    dataset_suffix: "full_smote"
 
     # Experiment configuration
-    experiment_name: "redux_smote"
+    experiment_name: "full_smote"
 
     # Feature correlation analysis
     analyze_correlations: true
@@ -138,25 +138,25 @@ dataset_configs:
     # Tags specific to this dataset
     tags:
       dataset_imbalance_technique: "smote"
-      dataset_kmer_redux: "true"
+      dataset_kmer_redux: "false"
       features_cpat: "true"
       features_regulators_mhe: "all"
       features_ss: "true"
       features_filter: "none"
 
-  redux_raw_smote_tomek:
-    name: "k-mer redux raw SMOTE Tomek dataset"
+  full_raw_smote_tomek:
+    name: "k-mer full raw SMOTE Tomek dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No feature selection applied. SMOTE applied to balance classes. Tomek links applied to clean the dataset."
     
     # Dataset paths
-    train_data: "src/data/X_train_redux_smote_tomek.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
+    train_data: "src/data/X_train_full_smote_tomek.parquet"
+    test_data: "src/data/X_test_full.parquet"
+    holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "redux_smote_tomek"
+    dataset_suffix: "full_smote_tomek"
 
     # Experiment configuration
-    experiment_name: "redux_smote_tomek"
+    experiment_name: "full_smote_tomek"
 
     # Feature correlation analysis
     #analyze_correlations: true
@@ -166,25 +166,25 @@ dataset_configs:
     # Tags specific to this dataset
     tags:
       dataset_imbalance_technique: "smote_tomek"
-      dataset_kmer_redux: "true"
+      dataset_kmer_redux: "false"
       features_cpat: "true"
       features_regulators_mhe: "all"
       features_ss: "true"
       features_filter: "none"
 
-  redux_raw_corr_smote_tomek:
-    name: "k-mer redux raw SMOTE Tomek dataset"
+  full_raw_corr_smote_tomek:
+    name: "k-mer full raw SMOTE Tomek dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Automatic corelation analysis applied. SMOTE applied to balance classes. Tomek links applied to clean the dataset."
 
     # Dataset paths
-    train_data: "src/data/X_train_redux_smote_tomek.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
+    train_data: "src/data/X_train_full_smote_tomek.parquet"
+    test_data: "src/data/X_test_full.parquet"
+    holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "redux_smote_tomek"
+    dataset_suffix: "full_smote_tomek"
 
     # Experiment configuration
-    experiment_name: "redux_smote_tomek"
+    experiment_name: "full_smote_tomek"
 
     # Feature correlation analysis
     analyze_correlations: true
@@ -194,7 +194,7 @@ dataset_configs:
     # Tags specific to this dataset
     tags:
       dataset_imbalance_technique: "smote_tomek"
-      dataset_kmer_redux: "true"
+      dataset_kmer_redux: "false"
       features_cpat: "true"
       features_regulators_mhe: "all"
       features_ss: "true"
@@ -203,7 +203,7 @@ dataset_configs:
 advanced:
   # Custom model configurations per dataset
   # custom_model_configs:
-  #   redux_raw:
+  #   full_raw:
   #     randomforest:
   #       n_trials: 100
   #     xgboost:

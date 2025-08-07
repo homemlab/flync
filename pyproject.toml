@@ -4,6 +4,7 @@ version = "1.0.0"
 requires-python = ">=3.9,<3.10"
 dependencies = [
     "biopython>=1.85",
+    "boto3>=1.40.1",
     "cpat>=3.0.5",
     "imbalanced-learn>=0.12.4",
     "interpret>=0.7.1",

@@ -313,11 +313,12 @@ class ModelOptimizer:
     """Handles model creation and hyperparameter optimization, including EBM support."""
 
     def __init__(self, model_type: str, optimization_metrics: List[str],
-                 optimization_direction: str, random_state: int = 42):
+                 optimization_direction: str, random_state: int = 42, threads: int = 1):
         self.model_type = model_type.lower()
         self.optimization_metrics = optimization_metrics
         self.optimization_direction = optimization_direction
         self.random_state = random_state
+        self.threads = threads
 
         if self.model_type not in ["randomforest", "xgboost", "ebm", "lightgbm"]:
             raise ValueError("Model type must be 'randomforest', 'xgboost', 'ebm', or 'lightgbm'")
@@ -340,7 +341,7 @@ class ModelOptimizer:
                 "class_weight": trial.suggest_categorical("class_weight", [None, "balanced", "balanced_subsample"]),
                 "criterion": trial.suggest_categorical("criterion", ["gini", "entropy"]),
                 "random_state": self.random_state,
-                "n_jobs": -1
+                "n_jobs": self.threads
             }
         elif self.model_type == "xgboost":
             return {
@@ -357,7 +358,7 @@ class ModelOptimizer:
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
                 "scale_pos_weight": trial.suggest_float("scale_pos_weight", 1.0, 20.0),
                 "random_state": self.random_state,
-                "n_jobs": -1,
+                "n_jobs": self.threads,
                 "verbosity": 0
             }
         elif self.model_type == "ebm":
@@ -368,7 +369,7 @@ class ModelOptimizer:
                 "learning_rate": trial.suggest_float("learning_rate", 0.001, 0.2, log=True),
                 "min_samples_leaf": trial.suggest_int("min_samples_leaf", 2, 50),
                 "max_leaves": trial.suggest_int("max_leaves", 2, 50),
-                "n_jobs": -1,
+                "n_jobs": self.threads,
                 "random_state": self.random_state
             }
         elif self.model_type == "lightgbm":
@@ -392,7 +393,8 @@ class ModelOptimizer:
                 "scale_pos_weight": trial.suggest_float("scale_pos_weight", 1.0, 20.0),
                 "random_state": self.random_state,
                 "verbosity": -1,
-                "force_col_wise": True
+                "force_col_wise": True,
+                "n_jobs": self.threads
             }
             
             # Add boosting-specific parameters
@@ -907,11 +909,153 @@ def create_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tags", nargs="+", type=str,
                        help="Additional tags in key=value format (e.g., --tags experiment_type=test batch_id=001)")
     
+    # Thread configuration
+    parser.add_argument("--threads", type=int, default=1,
+                       help="Number of threads to use for model training and optimization (default: 1)")
+    
     # Debug arguments
     parser.add_argument("--debug", action="store_true",
                        help="Enable debug logging for detailed troubleshooting")
+    
+    # Top models training
+    parser.add_argument("--top-n", type=int, default=1,
+                       help="Number of top models to train and evaluate on holdout data (default: 1)")
 
     return parser
+
+
+def train_and_evaluate_top_models(study: optuna.Study, optimizer: ModelOptimizer, 
+                                 X_train: pd.DataFrame, y_train: pd.Series,
+                                 X_holdout: pd.DataFrame, y_holdout: pd.Series,
+                                 holdout_dataset, top_n: int, model_type: str,
+                                 optimization_metrics: List[str]) -> int:
+    """
+    Train and evaluate the top N models from the Optuna study on the holdout dataset.
+    
+    Returns:
+        int: Number of models actually trained (may be less than top_n if fewer trials exist)
+    """
+    if not study.trials:
+        logger.warning("No completed trials found in study")
+        return 0
+    
+    # Get top N trials sorted by objective value
+    # For multi-objective optimization, we'll use the first objective or aggregated value
+    completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+    if not completed_trials:
+        logger.warning("No completed trials found in study")
+        return 0
+    
+    # Sort trials by objective value
+    # Optuna stores values as a list for multi-objective optimization
+    # For single objective, it's still a list with one element
+    def get_sort_key(trial):
+        if trial.values is None:
+            return float('-inf') if study.direction == optuna.study.StudyDirection.MAXIMIZE else float('inf')
+        # Use the first objective value, or average if multiple objectives
+        if len(trial.values) == 1:
+            return trial.values[0]
+        else:
+            # For multiple objectives, use the average
+            return sum(trial.values) / len(trial.values)
+    
+    # Sort by objective value
+    ascending = study.direction == optuna.study.StudyDirection.MINIMIZE
+    sorted_trials = sorted(completed_trials, key=get_sort_key, reverse=not ascending)
+    
+    # Limit to top N
+    actual_top_n = min(top_n, len(sorted_trials))
+    top_trials = sorted_trials[:actual_top_n]
+    
+    logger.info(f"Training and evaluating top {actual_top_n} models from {len(completed_trials)} total completed trials")
+    
+    models_trained = 0
+    
+    for i, trial in enumerate(top_trials, 1):
+        try:
+            # Get trial information
+            trial_number = trial.number
+            trial_value = get_sort_key(trial)
+            
+            logger.info(f"Training model {i}/{actual_top_n} (Trial #{trial_number}, Score: {trial_value:.4f})")
+            
+            # Create nested MLflow run for this top model
+            with mlflow.start_run(nested=True, run_name=f"top_{i}_model_trial_{trial_number}"):
+                # Log trial information
+                mlflow.log_param("top_model_rank", i)
+                mlflow.log_param("original_trial_number", trial_number)
+                mlflow.log_param("optimization_score", trial_value)
+                mlflow.log_params(trial.params)
+                
+                # Log individual objective values if multiple
+                if trial.values and len(trial.values) > 1:
+                    for j, value in enumerate(trial.values):
+                        mlflow.log_param(f"objective_{j}_value", value)
+                
+                # Create and train the model
+                model = optimizer.create_model(trial.params)
+                logger.debug(f"Training model with parameters: {trial.params}")
+                model.fit(X_train, y_train)
+                
+                # Evaluate on holdout set
+                y_holdout_pred = model.predict(X_holdout)
+                if hasattr(model, "predict_proba"):
+                    y_holdout_pred_proba = model.predict_proba(X_holdout)[:, 1]
+                else:
+                    y_holdout_pred_proba = y_holdout_pred
+                
+                # Calculate and log metrics
+                holdout_metrics = MetricsCalculator.calculate_metrics(y_holdout, y_holdout_pred, y_holdout_pred_proba)
+                
+                # Log metrics with holdout prefix
+                mlflow.log_metrics({f"holdout_{k}": v for k, v in holdout_metrics.items()})
+                
+                # Log the optimization metrics specifically
+                for j, metric in enumerate(optimization_metrics):
+                    if metric in holdout_metrics:
+                        mlflow.log_metric(f"optimization_metric_{metric}", holdout_metrics[metric])
+                
+                # Log curves and confusion matrix
+                MetricsCalculator.log_curves_and_confusion(
+                    y_holdout, y_holdout_pred, y_holdout_pred_proba, 
+                    f"holdout_top_{i}", trial_number
+                )
+                
+                # Log feature importance for this model
+                feature_names = X_train.columns.tolist()
+                FeatureImportanceAnalyzer.analyze_and_log(
+                    model, feature_names, model_type, f"top_{i}", trial_number
+                )
+                
+                # Log model artifact (optional - can be large)
+                try:
+                    if model_type == "randomforest":
+                        import joblib
+                        model_path = f"top_{i}_model.joblib"
+                        joblib.dump(model, model_path)
+                        mlflow.log_artifact(model_path)
+                        os.remove(model_path)  # Clean up
+                    elif model_type in ["xgboost", "lightgbm"]:
+                        model_path = f"top_{i}_model.json"
+                        model.save_model(model_path)
+                        mlflow.log_artifact(model_path)
+                        os.remove(model_path)  # Clean up
+                    # EBM models are harder to serialize, skip for now
+                    
+                    logger.debug(f"Saved model artifact for top {i} model")
+                except Exception as e:
+                    logger.warning(f"Failed to save model artifact for top {i} model: {e}")
+                
+                models_trained += 1
+                logger.info(f"✅ Completed evaluation of top {i} model (Trial #{trial_number})")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to train/evaluate top {i} model: {e}")
+            logger.debug(f"Exception details:", exc_info=True)
+            continue
+    
+    logger.info(f"Successfully trained and evaluated {models_trained}/{actual_top_n} top models")
+    return models_trained
 
 
 def main():
@@ -1012,7 +1156,7 @@ def main():
             # Create optimizer
             optimizer = ModelOptimizer(
                 args.model_type, args.optimization_metrics,
-                args.optimization_direction, args.random_state
+                args.optimization_direction, args.random_state, args.threads
             )
             study_manager = OptunaStudyManager(
                 args.study_name, args.storage_url, args.optimization_direction
@@ -1061,18 +1205,25 @@ def main():
             
             # Log best trial results
             logger.info("Optimization finished. Logging best trial results...")
+            if not study.trials:
+                logger.warning("No trials completed. Cannot train final models.")
+                return
+                
             best_trial = study.best_trial
             mlflow.log_params(best_trial.params)
             mlflow.log_metrics({f"best_{metric}": getattr(best_trial.values[i] if len(best_trial.values) > i else 0, '__float__', lambda: 0)() for i, metric in enumerate(args.optimization_metrics)})
             mlflow.set_tag("best_trial_number", str(best_trial.number))
             
-            # Retrain the best model on the full training data and evaluate on holdout set
-            logger.info("Training final model with best parameters on full training set...")
-            best_model = optimizer.create_model(best_trial.params)
-            best_model.fit(X_train, y_train)
+            # Train and evaluate top-n models
+            logger.info(f"Training top {args.top_n} model(s) and evaluating on holdout set...")
+            top_n_models_trained = train_and_evaluate_top_models(
+                study, optimizer, X_train, y_train, X_holdout, y_holdout,
+                holdout_dataset, args.top_n, args.model_type, args.optimization_metrics
+            )
             
-            # Log final model metadata and dataset for final training
-            mlflow.log_param("final_model_trained", True)
+            # Log metadata about top models training
+            mlflow.log_param("top_n_models_requested", args.top_n)
+            mlflow.log_param("top_n_models_trained", top_n_models_trained)
             mlflow.log_param("final_training_samples", len(X_train))
             mlflow.log_param("final_feature_count", X_train.shape[1])
             
@@ -1082,22 +1233,6 @@ def main():
                 logger.debug("Logged holdout dataset for final evaluation")
             except Exception as e:
                 logger.warning(f"Failed to log holdout dataset: {e}")
-            
-            y_holdout_pred = best_model.predict(X_holdout)
-            if hasattr(best_model, "predict_proba"):
-                y_holdout_pred_proba = best_model.predict_proba(X_holdout)[:, 1]
-            else:
-                y_holdout_pred_proba = y_holdout_pred # For models without predict_proba
-
-            holdout_metrics = MetricsCalculator.calculate_metrics(y_holdout, y_holdout_pred, y_holdout_pred_proba)
-            mlflow.log_metrics({f"holdout_{k}": v for k, v in holdout_metrics.items()})
-            
-            # Log curves and confusion matrix for holdout set
-            MetricsCalculator.log_curves_and_confusion(y_holdout, y_holdout_pred, y_holdout_pred_proba, "holdout")
-
-            # Log final feature importance
-            feature_names = X_train.columns.tolist()
-            FeatureImportanceAnalyzer.analyze_and_log(best_model, feature_names, args.model_type, "final")
 
             # Log study visualizations
             study_manager.log_study_visualizations(study)

@@ -11,6 +11,8 @@ Based on the hyperparameter_optimizer.py script.
 """
 
 import argparse
+import fcntl
+import os
 import re
 import subprocess
 import sys
@@ -27,6 +29,57 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+class ProcessLock:
+    """Ensures only one batch optimization process runs at a time."""
+    
+    def __init__(self, lock_file: str = "/tmp/batch_optimization.lock"):
+        self.lock_file = lock_file
+        self.lock_fd = None
+    
+    def __enter__(self):
+        """Acquire the process lock."""
+        try:
+            self.lock_fd = open(self.lock_file, 'w')
+            fcntl.flock(self.lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            
+            # Write process info to lock file
+            self.lock_fd.write(f"PID: {os.getpid()}\n")
+            self.lock_fd.write(f"Started: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            self.lock_fd.flush()
+            
+            logger.info("✅ Process lock acquired - this is the only batch optimization running")
+            return self
+            
+        except (IOError, OSError) as e:
+            if self.lock_fd:
+                self.lock_fd.close()
+            
+            logger.error("❌ Another batch optimization process is already running!")
+            logger.error("Only one batch optimization can run at a time to prevent thread over-subscription.")
+            logger.error("Please wait for the current process to complete or stop it manually.")
+            
+            # Try to show info about the running process
+            try:
+                with open(self.lock_file, 'r') as f:
+                    lock_info = f.read().strip()
+                    logger.error(f"Running process info:\n{lock_info}")
+            except:
+                pass
+                
+            sys.exit(1)
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Release the process lock."""
+        if self.lock_fd:
+            try:
+                fcntl.flock(self.lock_fd.fileno(), fcntl.LOCK_UN)
+                self.lock_fd.close()
+                os.unlink(self.lock_file)
+                logger.info("🔓 Process lock released")
+            except:
+                pass  # Lock file might already be removed
 
 
 def parse_tags(tags_list: List[str]) -> Dict[str, str]:
@@ -136,12 +189,18 @@ class BatchOptimizer:
             
             logger.debug(f"Generating combinations for dataset '{dataset_name}' with {len(models)} models and {len(metric_combinations)} metric combinations")
             
+            # Apply execution rules before generating combinations
+            models = self._apply_execution_rules(models, job_config)
+            
             for model_type in models:
                 for metrics in metric_combinations:
                     # Create configuration for this specific combination
                     config = job_config.copy()
                     config["model_type"] = model_type
                     config["optimization_metrics"] = metrics
+                    
+                    # Apply auto-adjust trials rule
+                    config = self._apply_trial_adjustment(config, job_config)
                     
                     # Generate names based on configuration
                     metrics_str = "_".join(metrics)
@@ -150,10 +209,7 @@ class BatchOptimizer:
                     # Use provided experiment name or generate one
                     if "experiment_name" not in config or not config["experiment_name"]:
                         config["experiment_name"] = f"{model_type}_{dataset_suffix}_{metrics_str}"
-                    else:
-                        # Append model and metrics to provided experiment name for uniqueness
-                        base_exp_name = config["experiment_name"]
-                        config["experiment_name"] = f"{base_exp_name}_{model_type}_{metrics_str}"
+                    # If experiment_name is provided in config, use it as-is without modification
                     
                     config["study_name"] = f"{model_type}_optimization_{dataset_suffix}_{metrics_str}"
                     
@@ -171,6 +227,106 @@ class BatchOptimizer:
         
         logger.info(f"Generated {len(combinations)} total combinations from {len(job_configs)} job configs")
         return combinations
+    
+    def _apply_execution_rules(self, models: List[str], job_config: Dict[str, Any]) -> List[str]:
+        """Apply execution rules to filter models based on dataset characteristics."""
+        # Get execution rules from advanced config or job config
+        execution_rules = job_config.get('execution_rules', {})
+        
+        # Handle nested advanced.execution_rules structure
+        if 'advanced' in job_config and 'execution_rules' in job_config['advanced']:
+            execution_rules = job_config['advanced']['execution_rules']
+        
+        if not execution_rules:
+            logger.debug("No execution rules found, returning all models")
+            return models
+        
+        filtered_models = models.copy()
+        
+        # Rule: Skip EBM for large datasets
+        if execution_rules.get('skip_ebm_large_datasets', False):
+            max_features_for_ebm = execution_rules.get('max_features_for_ebm', 1500)
+            
+            # Try to estimate number of features from dataset path or config
+            num_features = self._estimate_dataset_features(job_config)
+            
+            if num_features and num_features > max_features_for_ebm:
+                if 'ebm' in filtered_models:
+                    filtered_models.remove('ebm')
+                    logger.info(f"Skipping EBM model for dataset '{job_config.get('dataset_name', 'unknown')}' "
+                              f"due to high feature count ({num_features} > {max_features_for_ebm})")
+            else:
+                logger.debug(f"EBM allowed for dataset '{job_config.get('dataset_name', 'unknown')}' "
+                           f"with {num_features} features (≤ {max_features_for_ebm})")
+        
+        return filtered_models
+    
+    def _estimate_dataset_features(self, job_config: Dict[str, Any]) -> Optional[int]:
+        """Estimate the number of features in a dataset by loading it."""
+        train_data_path = job_config.get('train_data')
+        target_column = job_config.get('target_column', 'y')
+        
+        if not train_data_path:
+            logger.warning("No train_data path found in job config")
+            return None
+        
+        try:
+            # Try to load just the first few rows to get column count
+            import pandas as pd
+            
+            # Convert relative path to absolute if needed
+            if not train_data_path.startswith('/'):
+                train_data_path = os.path.join(os.getcwd(), train_data_path)
+            
+            df = pd.read_parquet(train_data_path, nrows=1)  # Just read first row
+            num_features = df.shape[1] - 1  # Subtract target column
+            
+            logger.debug(f"Estimated {num_features} features from dataset at {train_data_path}")
+            return num_features
+            
+        except Exception as e:
+            logger.warning(f"Failed to estimate features from {train_data_path}: {e}")
+            return None
+    
+    def _apply_trial_adjustment(self, config: Dict[str, Any], job_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply auto-adjust trials rule based on dataset size."""
+        # Get execution rules from advanced config or job config
+        execution_rules = job_config.get('execution_rules', {})
+        
+        # Handle nested advanced.execution_rules structure
+        if 'advanced' in job_config and 'execution_rules' in job_config['advanced']:
+            execution_rules = job_config['advanced']['execution_rules']
+        
+        if not execution_rules.get('auto_adjust_trials', False):
+            return config
+        
+        num_features = self._estimate_dataset_features(job_config)
+        if not num_features:
+            return config
+        
+        min_trials = execution_rules.get('min_trials', 50)
+        max_trials = execution_rules.get('max_trials', 300)
+        
+        # Simple heuristic: more trials for more features
+        if num_features < 100:
+            adjusted_trials = min_trials
+        elif num_features < 500:
+            adjusted_trials = min(max_trials, min_trials + 50)
+        elif num_features < 1000:
+            adjusted_trials = min(max_trials, min_trials + 100)
+        else:
+            adjusted_trials = max_trials
+        
+        # Don't reduce below what was specified
+        original_trials = config.get('n_trials', min_trials)
+        adjusted_trials = max(adjusted_trials, original_trials)
+        
+        if adjusted_trials != original_trials:
+            config['n_trials'] = adjusted_trials
+            logger.info(f"Auto-adjusted trials for {config.get('model_type', 'unknown')} model "
+                       f"from {original_trials} to {adjusted_trials} (features: {num_features})")
+        
+        return config
     
     def generate_combinations(self, 
                             model_types: List[str],
@@ -266,6 +422,15 @@ class BatchOptimizer:
         if tags:
             cmd.extend(["--tags"] + tags)
         
+        # Thread configuration
+        # Add threads if specified (default to 1 if not in config)
+        threads = config.get("threads", 1)
+        cmd.extend(["--threads", str(threads)])
+        
+        # Top-n models configuration
+        top_n = config.get("top_n", 1)
+        cmd.extend(["--top-n", str(top_n)])
+        
         # Debug flag
         if config.get("debug"):
             cmd.append("--debug")
@@ -323,32 +488,69 @@ class BatchOptimizer:
     
     def run_batch(self, combinations: List[Dict[str, Any]], 
                   dry_run: bool = False, 
-                  parallel: bool = False,
                   delay_between_jobs: int = 30) -> Dict[str, List[str]]:
-        """Run batch optimization jobs."""
+        """Run batch optimization jobs sequentially (one at a time)."""
         
         results = {"success": [], "failed": []}
         
-        logger.info(f"Starting batch optimization with {len(combinations)} combinations")
-        logger.info(f"Dry run: {dry_run}, Parallel: {parallel}")
+        logger.info("="*80)
+        logger.info("🚀 STARTING SEQUENTIAL BATCH OPTIMIZATION")
+        logger.info("="*80)
+        logger.info(f"Total combinations to process: {len(combinations)}")
+        logger.info(f"Execution mode: {'DRY RUN' if dry_run else 'LIVE'}")
         
-        if parallel:
-            logger.warning("Parallel execution not implemented yet. Running sequentially.")
+        # Show thread configuration for first combination to confirm settings
+        if combinations:
+            threads = combinations[0].get('threads', 1)
+            logger.info(f"🧵 Thread configuration: {threads} threads per optimization job")
+            logger.info(f"⚠️  SEQUENTIAL EXECUTION: Only 1 hyperparameter optimizer will run at a time")
+            logger.info(f"💡 This prevents thread over-subscription and maintains system stability")
+        
+        logger.info("="*80)
+        
+        start_time = time.time()
         
         for i, config in enumerate(combinations, 1):
-            logger.info(f"[{i}/{len(combinations)}] Running configuration...")
+            job_start_time = time.time()
+            
+            logger.info("")
+            logger.info(f"📋 [{i}/{len(combinations)}] PROCESSING JOB {i}")
+            logger.info(f"   Model: {config['model_type']}")
+            logger.info(f"   Metrics: {config['optimization_metrics']}")
+            logger.info(f"   Experiment: {config['experiment_name']}")
+            logger.info(f"   Study: {config['study_name']}")
+            logger.info(f"   Threads: {config.get('threads', 1)}")
             
             success = self.run_optimization(config, dry_run)
             
+            job_duration = time.time() - job_start_time
+            
             if success:
                 results["success"].append(config["study_name"])
+                logger.info(f"✅ [{i}/{len(combinations)}] COMPLETED in {job_duration:.1f}s: {config['study_name']}")
             else:
                 results["failed"].append(config["study_name"])
+                logger.error(f"❌ [{i}/{len(combinations)}] FAILED after {job_duration:.1f}s: {config['study_name']}")
+            
+            # Progress summary
+            remaining = len(combinations) - i
+            elapsed = time.time() - start_time
+            if i > 0:
+                avg_time = elapsed / i
+                estimated_remaining = avg_time * remaining
+                logger.info(f"📊 Progress: {i}/{len(combinations)} jobs, {remaining} remaining")
+                logger.info(f"⏱️  Elapsed: {elapsed:.1f}s, Est. remaining: {estimated_remaining:.1f}s")
             
             # Add delay between jobs (except for dry runs and last job)
             if not dry_run and i < len(combinations) and delay_between_jobs > 0:
-                logger.info(f"Waiting {delay_between_jobs} seconds before next job...")
+                logger.info(f"⏸️  Waiting {delay_between_jobs}s before next job (prevents resource conflicts)...")
                 time.sleep(delay_between_jobs)
+        
+        total_duration = time.time() - start_time
+        logger.info("")
+        logger.info("="*80)
+        logger.info(f"🏁 BATCH OPTIMIZATION COMPLETED in {total_duration:.1f}s")
+        logger.info("="*80)
         
         return results
 
@@ -455,8 +657,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
     # Execution options
     parser.add_argument("--dry-run", action="store_true",
                        help="Show commands that would be run without executing")
-    parser.add_argument("--parallel", action="store_true",
-                       help="Run optimizations in parallel (not implemented)")
     
     # Feature selection arguments
     parser.add_argument("--analyze-correlations", action="store_true",
@@ -469,6 +669,14 @@ def create_argument_parser() -> argparse.ArgumentParser:
     # Tags arguments
     parser.add_argument("--tags", nargs="+", type=str,
                        help="Additional tags in key=value format for all jobs (e.g., --tags batch_id=001 experiment_type=test)")
+    
+    # Thread configuration
+    parser.add_argument("--threads", type=int, default=None,
+                       help="Number of threads to use for model training and optimization (default: from config or 1)")
+    
+    # Top models training
+    parser.add_argument("--top-n", type=int, default=None,
+                       help="Number of top models to train and evaluate on holdout data (default: from config or 1)")
     
     # Debug arguments
     parser.add_argument("--debug", action="store_true",
@@ -490,6 +698,14 @@ def main(args=None):
     
     logger.debug(f"Batch optimization arguments: {vars(args)}")
     
+    # Use process lock to ensure only one batch optimization runs at a time
+    # This prevents thread over-subscription and resource conflicts
+    with ProcessLock():
+        _execute_batch_optimization(args)
+
+
+def _execute_batch_optimization(args):
+    """Execute the batch optimization with process lock acquired."""
     # Handle configuration modes
     if args.config:
         # Config file mode
@@ -506,8 +722,10 @@ def main(args=None):
                 job_config['dry_run'] = True
             if args.debug:
                 job_config['debug'] = True
-            if args.parallel:
-                job_config['parallel'] = True
+            if args.threads is not None:
+                job_config['threads'] = args.threads
+            if getattr(args, 'top_n', None) is not None:
+                job_config['top_n'] = args.top_n
             if args.delay_between_jobs is not None:
                 job_config['delay_between_jobs'] = args.delay_between_jobs
             if args.job_timeout is not None:
@@ -572,6 +790,14 @@ def main(args=None):
         if args.debug:
             base_config["debug"] = True
         
+        # Add threads configuration
+        if args.threads is not None:
+            base_config["threads"] = args.threads
+        
+        # Add top-n configuration
+        if getattr(args, 'top_n', None) is not None:
+            base_config["top_n"] = args.top_n
+        
         # Add additional tags
         if additional_tags_list:
             base_config["additional_tags"] = additional_tags_list
@@ -607,7 +833,6 @@ def main(args=None):
     results = batch_optimizer.run_batch(
         combinations,
         dry_run=args.dry_run,
-        parallel=args.parallel,
         delay_between_jobs=args.delay_between_jobs
     )
     
