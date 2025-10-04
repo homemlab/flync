@@ -12,3 +12,4 @@ genome/
 **.pyc
 **.env
 **.venv
+**.del

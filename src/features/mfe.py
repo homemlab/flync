@@ -1,264 +1,302 @@
-import pandas as pd
-import sys
 import argparse
-import os # Import os to work with file paths, extensions, and CPU count
-import multiprocessing # Import multiprocessing for parallel execution
-import math # For ceiling function
-import logging # Added for standardized logging
+import logging
+import math
+import multiprocessing
+import os
+import re
+import subprocess
+import sys
+from typing import Optional, Tuple, Union
+
+import pandas as pd
+
+# Import progress utilities
+try:
+    from src.utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings
+except ImportError:
+    # Try relative import when running as script
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings
+
 
 # --- Logging Setup ---
 def setup_logging(log_level):
     """
     Configures the root logger for the application.
-
-    Args:
-        log_level (str): The desired logging level (e.g., 'DEBUG', 'INFO', 'WARNING').
     """
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
-        # Default to INFO if an invalid log level string is provided
         logging.warning(f"Invalid log level '{log_level}'. Defaulting to INFO.")
         numeric_level = logging.INFO
-    
+
     logging.basicConfig(
-        level=numeric_level, 
+        level=numeric_level,
         format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",
-        stream=sys.stdout # Direct logs to stdout
+        stream=sys.stdout,
     )
-    # For warnings/errors from other libraries that use logging, ensure they are also visible
-    # if our level is DEBUG, for example. This is generally handled by basicConfig level.
+
 
 # --- Dependency Check ---
-# Check specifically for PyArrow
 pyarrow_available = False
 try:
     import pyarrow
-    pyarrow_available = True
-    # Use logging instead of print for initial messages, once logging is configured.
-    # logging.info("Using 'pyarrow' engine for file operations where possible.") 
-except ImportError:
-    # logging.warning("'pyarrow' package not found. Install with: pip install pandas pyarrow")
-    # logging.warning("Parquet file support (.parquet) will be unavailable.")
-    pass # Warnings will be emitted by functions that need it, or at CLI start.
 
-# --- ViennaRNA Check ---
-try:
-    import RNA
+    pyarrow_available = True
 except ImportError:
-    # These are critical, so print to stderr and exit early if logging isn't set up yet.
-    print("CRITICAL ERROR: The 'ViennaRNA' package is not installed or cannot be found.", file=sys.stderr)
-    print("Please install it using 'pip install ViennaRNA' and ensure the ViennaRNA suite is installed on your system.", file=sys.stderr)
-    print("See: https://www.tbi.univie.ac.at/RNA/#download", file=sys.stderr)
-    sys.exit(1)
+    pass
+
+
+# --- LinearFold Prediction Function ---
+def get_linearfold_prediction(sequence: str) -> Tuple[str, float]:
+    """
+    Predicts the secondary structure and calculates the Minimum Free Energy (MFE)
+    of an RNA sequence using LinearFold.
+
+    Args:
+        sequence: The nucleotide sequence.
+
+    Returns:
+        A tuple containing:
+        - The predicted secondary structure in dot-bracket notation (str).
+        - The calculated MFE value as a float (kcal/mol).
+
+    Raises:
+        RuntimeError: If the LinearFold command fails to execute.
+        ValueError: If the output from LinearFold cannot be parsed correctly.
+    """
+    # Ensure the sequence is a single line without invalid characters for the command
+    if not re.match(r"^[ATGCUatgcuNn]+$", sequence):
+        raise ValueError("Sequence contains invalid characters.")
+    sequence = sequence.strip().upper().replace("T", "U")  # Normalize to uppercase for RNA folding
+
+    try:
+        # Execute the LinearFold command
+        process = subprocess.run(
+            ["/home/chlab/LinearFold/linearfold", "-V"],
+            input=sequence,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,  # This will raise CalledProcessError for non-zero exit codes
+        )
+    except FileNotFoundError:
+        raise RuntimeError("LinearFold command not found. Is it installed and in your PATH?")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"LinearFold encountered an error: {e.stderr}")
+
+    # The standard output from LinearFold contains the results.
+    # Example output:
+    # GGUGCUGAUGAUGUGAGUUGGUUAGUAUUUGUCUGAUUGAAU
+    # .((((....)))).((.((...)).))............... (-5.40)
+    output_lines = process.stdout.strip().split("\n")
+
+    # We expect at least 2 lines in the output: sequence and structure+MFE
+    if len(output_lines) < 2:
+        raise ValueError(f"Unexpected output format from LinearFold: {process.stdout}")
+
+    # The last line contains the structure and the MFE
+    prediction_line = output_lines[-1]
+
+    # The dot-bracket structure is the first part of the line
+    structure = prediction_line.split(" ")[0]
+
+    # The MFE value is enclosed in parentheses at the end of the line
+    mfe_match = re.search(r"\((.*?)\)", prediction_line.split(" ")[-1])
+
+    if not structure or not mfe_match:
+        raise ValueError(f"Could not parse structure or MFE from output: '{prediction_line}'")
+
+    mfe_value = float(mfe_match.group(1))
+
+    return structure, mfe_value
+
 
 # --- Helper function for multiprocessing ---
-def get_folding_results_mp_helper_indexed(item: tuple[int, str]) -> tuple[int, float | None, str | None]:
+def get_folding_results_mp_helper_indexed(
+    item: Tuple[int, str],
+) -> Tuple[int, Union[float, None], Union[str, None]]:
     """
-    Calculates Minimum Free Energy (MFE) and RNA secondary structure for a single RNA sequence.
+    Calculates Minimum Free Energy (MFE) and RNA secondary structure for a single RNA sequence using LinearFold.
 
     This function is designed to be used as a worker in a multiprocessing pool.
-    It takes a tuple containing an original index and a sequence, performs RNA folding
-    using ViennaRNA, and returns the index along with the MFE and structure.
+    It takes a tuple containing an original index and a sequence, performs RNA folding,
+    and returns the index along with the MFE and structure.
 
     Args:
         item (tuple[int, str]): A tuple where:
-            - item[0] (int): The original index of the sequence within its current processing batch.
-            - item[1] (str): The RNA sequence string (e.g., "ACGUG...").
+            - item[0] (int): The original index of the sequence.
+            - item[1] (str): The RNA sequence string.
 
     Returns:
-        tuple[int, float | None, str | None]: A tuple containing:
-            - original_index (int): The input original index.
-            - mfe (float | None): The calculated MFE. pd.NA if calculation fails or sequence is invalid.
-            - structure (str | None): The predicted secondary structure in dot-bracket notation. 
-                                      pd.NA if calculation fails, sequence is invalid, or structure not requested.
+        tuple[int, float | None, str | None]: A tuple containing the original index, MFE, and structure.
+                                              Returns pd.NA for MFE/structure on failure.
     """
     original_idx, sequence = item
     if not isinstance(sequence, str) or not sequence:
-        logging.debug(f"Sequence at index {original_idx} is invalid (empty or not a string). Skipping.")
+        logging.debug(f"Sequence at index {original_idx} is invalid. Skipping.")
         return original_idx, pd.NA, pd.NA
     try:
-        structure, mfe = RNA.fold(sequence)
-        logging.debug(f"Successfully folded sequence at index {original_idx} (len {len(sequence)}): MFE={mfe}")
+        # Use the LinearFold function
+        structure, mfe = get_linearfold_prediction(sequence)
+        logging.debug(
+            f"Successfully folded sequence at index {original_idx} (len {len(sequence)}): MFE={mfe}"
+        )
         return original_idx, float(mfe), str(structure)
+    except (RuntimeError, ValueError) as e:
+        logging.warning(
+            f"LinearFold folding failed for sequence at index {original_idx} (len {len(sequence)}): {e}"
+        )
+        return original_idx, pd.NA, pd.NA
     except Exception as e:
-        logging.warning(f"RNA folding failed for sequence at index {original_idx} (len {len(sequence)}): {e}")
+        logging.error(
+            f"An unexpected error occurred in worker for sequence at index {original_idx}: {e}"
+        )
         return original_idx, pd.NA, pd.NA
 
 
 def calculate_all_mfe_and_structure(
-    df_to_process: pd.DataFrame, 
-    sequence_col: str = 'Sequence',
+    df_to_process: pd.DataFrame,
+    sequence_col: str = "Sequence",
     include_structure: bool = False,
-    num_processes: int | None = None
+    num_processes: Union[int, None] = None,
+    show_progress: bool = True,
+    quiet: bool = False,
 ) -> pd.DataFrame:
     """
-    Calculates MFE and optionally the secondary structure for sequences in a DataFrame subset.
+    Calculates MFE and optionally the secondary structure for sequences in a DataFrame using LinearFold.
 
     Uses multiprocessing to parallelize RNA folding calculations.
-
-    Args:
-        df_to_process (pd.DataFrame): DataFrame containing sequences that require MFE/structure calculation.
-                                      Must have the `sequence_col`.
-        sequence_col (str): Name of the column in `df_to_process` that contains RNA sequences.
-        include_structure (bool): If True, the secondary structure (dot-bracket notation)
-                                  is calculated and included in the output. Defaults to False.
-        num_processes (int, optional): Number of worker processes for multiprocessing.
-                                       Defaults to `os.cpu_count()`.
-
-    Returns:
-        pd.DataFrame: A DataFrame with the same index as `df_to_process`. It includes the
-                      original data from `df_to_process` plus new columns:
-                      'MFE' (float, or pd.NA on failure) and, if `include_structure` is True,
-                      'Structure' (str, or pd.NA on failure).
-
-    Raises:
-        KeyError: If `sequence_col` is not found in `df_to_process`.
     """
     if sequence_col not in df_to_process.columns:
-        logging.error(f"Sequence column '{sequence_col}' not found in the DataFrame subset for calculation.")
-        raise KeyError(f"Column '{sequence_col}' not found in the DataFrame subset provided for calculation.")
+        logging.error(f"Sequence column '{sequence_col}' not found in the DataFrame.")
+        raise KeyError(f"Column '{sequence_col}' not found.")
 
-    # Enumerate sequences from the df_to_process. Indices are local to this df.
     sequences_with_local_indices = list(enumerate(df_to_process[sequence_col].tolist()))
     total_sequences_to_calculate = len(sequences_with_local_indices)
 
     if total_sequences_to_calculate == 0:
-        logging.info("No new sequences to calculate in this run.")
-        # Return a copy of the input df with empty MFE/Structure columns if they don't exist
+        logging.info("No new sequences to calculate.")
         df_out = df_to_process.copy()
-        if 'MFE' not in df_out.columns:
-            df_out['MFE'] = pd.NA
-        if include_structure and 'Structure' not in df_out.columns:
-            df_out['Structure'] = pd.NA
+        if "mfe" not in df_out.columns:
+            df_out["mfe"] = pd.NA
+        if include_structure and "structure" not in df_out.columns:
+            df_out["structure"] = pd.NA
         return df_out
 
     if num_processes is None:
         num_processes = os.cpu_count()
-    logging.info(f"Calculating MFE for {total_sequences_to_calculate} sequences using {num_processes} processes...")
+    logging.info(
+        f"Calculating MFE for {total_sequences_to_calculate} sequences using {num_processes} processes with LinearFold..."
+    )
 
-    # Pre-allocate lists for results, sized for df_to_process
     mfe_values = [pd.NA] * total_sequences_to_calculate
     structure_values = [pd.NA] * total_sequences_to_calculate if include_structure else None
     processed_count = 0
 
+    # Create progress manager and progress bar
+    progress_manager = get_progress_manager(show_progress=show_progress, quiet=quiet)
+    mfe_progress = progress_manager.create_bar(
+        total=total_sequences_to_calculate, 
+        desc="Folding RNA sequences"
+    )
+
     pool = None
     try:
         pool = multiprocessing.Pool(processes=num_processes)
-        # Use imap_unordered for potentially better performance with uneven task times
-        results_iterator = pool.imap_unordered(get_folding_results_mp_helper_indexed, sequences_with_local_indices)
+        results_iterator = pool.imap_unordered(
+            get_folding_results_mp_helper_indexed, sequences_with_local_indices
+        )
 
         for local_idx, mfe, struct in results_iterator:
             mfe_values[local_idx] = mfe
-            if include_structure and structure_values is not None: # Ensure structure_values was initialized
+            if include_structure and structure_values is not None:
                 structure_values[local_idx] = struct
 
             processed_count += 1
-            if processed_count % 100 == 0 or processed_count == total_sequences_to_calculate:
-                progress = (processed_count / total_sequences_to_calculate) * 100
-                # Use logging for progress, consider if this is too verbose for INFO
-                # logging.debug(f"Calculation Progress: {processed_count}/{total_sequences_to_calculate} ({progress:.1f}%) processed...")
-                # For CLI, print might be better for \\r updates
-                print(f"\\rCalculation Progress: {processed_count}/{total_sequences_to_calculate} ({progress:.1f}%) processed...", end="")
+            mfe_progress.update(1)
 
     except Exception as e:
-         logging.error(f"Error during multiprocessing MFE calculation: {e}", exc_info=True)
-         # Indicate failure by preparing a DataFrame with NA columns
-         df_out = df_to_process.copy()
-         df_out['MFE'] = pd.NA
-         if include_structure:
-             df_out['Structure'] = pd.NA
-         # Ensure pool is closed even on error before returning
-         if pool:
-             pool.close()
-             pool.join()
-         if total_sequences_to_calculate > 0: 
-             print() # Final newline if progress was printed
-         return df_out # Propagate failure state
+        logging.error(f"Error during multiprocessing MFE calculation: {e}", exc_info=True)
+        df_out = df_to_process.copy()
+        df_out["mfe"] = pd.NA
+        if include_structure:
+            df_out["structure"] = pd.NA
+        if pool:
+            pool.close()
+            pool.join()
+        if total_sequences_to_calculate > 0:
+            logging.info("")
+        return df_out
 
     finally:
         if pool:
             pool.close()
             pool.join()
-        if total_sequences_to_calculate > 0: # Avoid printing newline if no calculations were done
-            print() # Final newline after progress indicator
+        mfe_progress.close()
 
-    logging.info("MFE calculations for the current set of sequences complete.")
+    logging.info("MFE calculations complete.")
 
-    # Assign results to a copy of df_to_process
-    df_out = df_to_process.copy() # df_out will have the same index as df_to_process
-    df_out['MFE'] = mfe_values
+    df_out = df_to_process.copy()
+    df_out["mfe"] = mfe_values
     if include_structure and structure_values is not None:
-        df_out['Structure'] = structure_values
+        df_out["structure"] = structure_values
 
-    df_out['MFE'] = pd.to_numeric(df_out['MFE'], errors='coerce')
+    df_out["mfe"] = pd.to_numeric(df_out["mfe"], errors="coerce")
     return df_out
 
 
-def load_checkpoint_batch(filename: str, include_structure: bool, sequence_col: str) -> pd.DataFrame | None:
+def load_checkpoint_batch(
+    filename: str, include_structure: bool, sequence_col: str
+) -> Union[pd.DataFrame, None]:
     """
     Attempts to load and validate a batch file as a checkpoint.
-
-    Supports CSV, TSV, and Parquet formats (Parquet requires pyarrow).
-    Validates that the checkpoint contains 'MFE' and, if expected, 'Structure' columns,
-    as well as the specified sequence column.
-
-    Args:
-        filename (str): Path to the checkpoint file.
-        include_structure (bool): Whether the 'Structure' column is expected in the checkpoint.
-        sequence_col (str): The name of the sequence column expected in the checkpoint.
-
-    Returns:
-        pd.DataFrame | None: The loaded DataFrame if successful and valid, otherwise None.
     """
     try:
         _, file_ext = os.path.splitext(filename)
         file_ext = file_ext.lower()
         df_checkpoint = None
-        csv_engine = 'pyarrow' if pyarrow_available else None # Use pyarrow for CSV if available
+        csv_engine = "pyarrow" if pyarrow_available else None
 
         logging.debug(f"Attempting to load checkpoint file: {filename}")
-        if file_ext == '.csv':
-            df_checkpoint = pd.read_csv(filename, sep=',', engine=csv_engine)
-        elif file_ext == '.tsv':
-            df_checkpoint = pd.read_csv(filename, sep='\t', engine=csv_engine)
-        elif file_ext == '.parquet':
+        if file_ext == ".csv":
+            df_checkpoint = pd.read_csv(filename, sep=",", engine=csv_engine)
+        elif file_ext == ".tsv":
+            df_checkpoint = pd.read_csv(filename, sep="\t", engine=csv_engine)
+        elif file_ext == ".parquet":
             if not pyarrow_available:
-                logging.warning(f"Cannot load Parquet checkpoint '{filename}', pyarrow not available.")
+                logging.warning(
+                    f"Cannot load Parquet checkpoint '{filename}', pyarrow not available."
+                )
                 return None
-            df_checkpoint = pd.read_parquet(filename, engine='pyarrow')
+            df_checkpoint = pd.read_parquet(filename, engine="pyarrow")
         else:
             logging.warning(f"Unknown extension for checkpoint file '{filename}'. Cannot load.")
             return None
 
-        # Validate checkpoint
-        if 'MFE' not in df_checkpoint.columns:
-            logging.warning(f"Checkpoint file '{filename}' is missing 'MFE' column. Will re-process corresponding data.")
+        if (
+            "mfe" not in df_checkpoint.columns
+            or (include_structure and "structure" not in df_checkpoint.columns)
+            or sequence_col not in df_checkpoint.columns
+        ):
+            logging.warning(
+                f"Checkpoint file '{filename}' is missing required columns. Will re-process."
+            )
             return None
-        if include_structure and 'Structure' not in df_checkpoint.columns:
-            logging.warning(f"Checkpoint file '{filename}' is missing 'Structure' column (when expected). Will re-process.")
-            return None
-        if sequence_col not in df_checkpoint.columns:
-            logging.warning(f"Checkpoint file '{filename}' is missing sequence column '{sequence_col}'. May indicate mismatch. Will re-process.")
-            return None
-        
+
         logging.info(f"Successfully loaded and validated checkpoint: {filename}")
         return df_checkpoint
     except Exception as e:
-        logging.warning(f"Could not load or validate checkpoint file '{filename}': {e}. Will re-process.")
+        logging.warning(
+            f"Could not load or validate checkpoint file '{filename}': {e}. Will re-process."
+        )
         return None
 
 
 def write_output_file(df: pd.DataFrame, filename: str):
     """
-    Writes a DataFrame to a file, inferring format from extension (CSV, TSV, Parquet).
-
-    Args:
-        df (pd.DataFrame): The DataFrame to write.
-        filename (str): The path to the output file.
-
-    Raises:
-        SystemExit: If an unsupported output format is specified or pyarrow is needed but unavailable.
-        SystemExit: If an error occurs during file writing.
+    Writes a DataFrame to a file, inferring format from extension.
     """
     try:
         _, output_ext = os.path.splitext(filename)
@@ -266,22 +304,129 @@ def write_output_file(df: pd.DataFrame, filename: str):
 
         logging.info(f"Writing output file: {filename} ({len(df)} rows)")
 
-        if output_ext == '.csv':
-            df.to_csv(filename, sep=',', index=False)
-        elif output_ext == '.tsv':
-            df.to_csv(filename, sep='\t', index=False)
-        elif output_ext == '.parquet':
+        if output_ext == ".csv":
+            df.to_csv(filename, sep=",", index=False)
+        elif output_ext == ".tsv":
+            df.to_csv(filename, sep="\t", index=False)
+        elif output_ext == ".parquet":
             if not pyarrow_available:
-                 logging.error(f"Cannot write Parquet file '{filename}' because 'pyarrow' package is not installed.")
-                 sys.exit(1) # Critical error for specified output type
-            df.to_parquet(filename, engine='pyarrow', index=False)
+                logging.error(
+                    f"Cannot write Parquet file '{filename}' because 'pyarrow' is not installed."
+                )
+                sys.exit(1)
+            df.to_parquet(filename, engine="pyarrow", index=False)
         else:
-            logging.error(f"Unsupported output file format '{output_ext}' for file '{filename}'. Please use .csv, .tsv, or .parquet.")
-            sys.exit(1) # Critical error for specified output type
+            logging.error(
+                f"Unsupported output file format '{output_ext}'. Please use .csv, .tsv, or .parquet."
+            )
+            sys.exit(1)
         logging.info(f"File saved successfully: {filename}")
     except Exception as e:
         logging.error(f"Error writing output file {filename}: {e}", exc_info=True)
-        sys.exit(1) # Critical error during write
+        sys.exit(1)
+
+
+def calculate_rna_mfe(
+    input_data: Union[str, pd.DataFrame],
+    sequence_col: str = "Sequence",
+    include_structure: bool = False,
+    num_processes: Optional[int] = None,
+    output_file: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Calculate Minimum Free Energy (MFE) and optionally secondary structure for RNA sequences.
+
+    This function provides a simple API interface to calculate RNA secondary structure
+    and MFE using LinearFold. It can process data from files or pandas DataFrames.
+
+    Args:
+        input_data: Path to input file (.csv, .tsv, .parquet, .fa, .fasta, .fna, .fas) or pandas DataFrame
+        sequence_col: Name of the column containing RNA sequences (ignored for FASTA input)
+        include_structure: Whether to include dot-bracket structure notation in output
+        num_processes: Number of parallel processes to use. Defaults to CPU count
+        output_file: Optional path to save results. Format inferred from extension
+
+    Returns:
+        pandas.DataFrame: Results with original data plus 'mfe' column and optionally 'structure' column
+
+    Raises:
+        FileNotFoundError: If input file doesn't exist
+        KeyError: If sequence column not found
+        ValueError: If input parameters are invalid
+        RuntimeError: If LinearFold processing fails
+
+    Example:
+        >>> from features.mfe_linear import calculate_rna_mfe
+        >>> import pandas as pd
+        >>>
+        >>> # From file
+        >>> results = calculate_rna_mfe("sequences.csv", include_structure=True)
+        >>>
+        >>> # From DataFrame
+        >>> df = pd.DataFrame({'Sequence': ['GGUGCUGAUGAU', 'AUUGCUAGC']})
+        >>> results = calculate_rna_mfe(df, num_processes=4)
+        >>> print(results[['Sequence', 'mfe']].head())
+    """
+    # Set up logging if not already configured
+    setup_logging("INFO")
+
+    # Handle DataFrame input
+    if isinstance(input_data, pd.DataFrame):
+        if sequence_col not in input_data.columns:
+            raise KeyError(f"Column '{sequence_col}' not found in DataFrame")
+
+        # Process DataFrame directly
+        result_df = calculate_all_mfe_and_structure(
+            input_data,
+            sequence_col=sequence_col,
+            include_structure=include_structure,
+            num_processes=num_processes,
+            show_progress=show_progress,
+            quiet=quiet,
+        )
+
+        if output_file:
+            write_output_file(result_df, output_file)
+
+        return result_df
+
+    # Handle file input
+    elif isinstance(input_data, str):
+        if not os.path.exists(input_data):
+            raise FileNotFoundError(f"Input file not found: {input_data}")
+
+        # Use the main processing function with temporary output if none specified
+        if output_file is None:
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+                temp_output = tmp.name
+
+            try:
+                result_df = process_mfe_calculations(
+                    input_file=input_data,
+                    output_file=temp_output,
+                    sequence_col=sequence_col,
+                    include_structure=include_structure,
+                    batch_size=0,  # No batching for API usage
+                    num_processes=num_processes,
+                )
+                return result_df
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_output):
+                    os.unlink(temp_output)
+        else:
+            return process_mfe_calculations(
+                input_file=input_data,
+                output_file=output_file,
+                sequence_col=sequence_col,
+                include_structure=include_structure,
+                batch_size=0,  # No batching for API usage
+                num_processes=num_processes,
+            )
+    else:
+        raise ValueError("input_data must be a file path string or pandas DataFrame")
 
 
 def process_mfe_calculations(
@@ -290,51 +435,67 @@ def process_mfe_calculations(
     sequence_col: str = "Sequence",
     include_structure: bool = False,
     batch_size: int = 0,
-    num_processes: int | None = None
+    num_processes: Union[int, None] = None,
+    show_progress: bool = True,
+    quiet: bool = False,
 ):
     """
     Core logic for calculating MFE and optionally structure for sequences from an input file.
-    Supports batching and checkpointing.
-
-    Args:
-        input_file (str): Path to the input file (.csv, .tsv, .parquet).
-        output_file (str): Path/base name for the output file(s).
-        sequence_col (str): Name of the sequence column in the input file.
-        include_structure (bool): If True, include secondary structure in the output.
-        batch_size (int): Size for batch processing. 0 means single output file (no batching).
-                          Enables checkpointing if > 0.
-        num_processes (int, optional): Number of cores for multiprocessing. Defaults to os.cpu_count().
-
-    Returns:
-        pd.DataFrame: The final DataFrame containing all results.
-                      This DataFrame is also written to file(s) as a side effect.
-
-    Raises:
-        SystemExit: For critical errors like file not found, unsupported format, or write errors.
-        KeyError: If the sequence column is not found in the input data.
+    Supports CSV, TSV, Parquet, and FASTA formats.
     """
     if batch_size < 0:
         logging.error("batch_size cannot be negative.")
         sys.exit(1)
 
-    # --- Read Full Input DataFrame ---
     try:
         _, input_ext = os.path.splitext(input_file)
         input_ext = input_ext.lower()
         logging.info(f"Reading input file: {input_file}")
-        csv_engine = 'pyarrow' if pyarrow_available else None
+        csv_engine = "pyarrow" if pyarrow_available else None
 
-        if input_ext == '.csv':
-            full_input_df = pd.read_csv(input_file, sep=',', engine=csv_engine)
-        elif input_ext == '.tsv':
-            full_input_df = pd.read_csv(input_file, sep='\t', engine=csv_engine)
-        elif input_ext == '.parquet':
+        # Check if input is a FASTA file
+        if input_ext in [".fa", ".fasta", ".fna", ".fas"]:
+            try:
+                from Bio import SeqIO
+            except ImportError:
+                logging.error(
+                    "Biopython is required for FASTA file processing. Install with: pip install biopython"
+                )
+                sys.exit(1)
+
+            logging.info("Processing FASTA input file")
+            sequences = []
+            seq_ids = []
+
+            try:
+                with open(input_file, "r") as handle:
+                    for record in SeqIO.parse(handle, "fasta"):
+                        seq_ids.append(record.id)
+                        sequences.append(str(record.seq))
+
+                if not sequences:
+                    logging.error(f"No valid sequences found in FASTA file: {input_file}")
+                    sys.exit(1)
+
+                logging.info(f"Successfully read {len(sequences)} sequences from FASTA file")
+                full_input_df = pd.DataFrame({"id": seq_ids, sequence_col: sequences})
+
+            except Exception as e:
+                logging.error(f"Error parsing FASTA file {input_file}: {e}", exc_info=True)
+                sys.exit(1)
+        elif input_ext == ".csv":
+            full_input_df = pd.read_csv(input_file, sep=",", engine=csv_engine)
+        elif input_ext == ".tsv":
+            full_input_df = pd.read_csv(input_file, sep="\t", engine=csv_engine)
+        elif input_ext == ".parquet":
             if not pyarrow_available:
-                 logging.error("Cannot read Parquet file '{input_file}', 'pyarrow' not installed.")
-                 sys.exit(1)
-            full_input_df = pd.read_parquet(input_file, engine='pyarrow')
+                logging.error(f"Cannot read Parquet file '{input_file}', 'pyarrow' not installed.")
+                sys.exit(1)
+            full_input_df = pd.read_parquet(input_file, engine="pyarrow")
         else:
-            logging.error(f"Unsupported input file format '{input_ext}' for file '{input_file}'.")
+            logging.error(
+                f"Unsupported input file format '{input_ext}'. Supported formats: .csv, .tsv, .parquet, .fa, .fasta, .fna, .fas"
+            )
             sys.exit(1)
         total_rows = len(full_input_df)
         logging.info(f"Successfully read {total_rows} total rows from {input_file}.")
@@ -347,94 +508,78 @@ def process_mfe_calculations(
 
     if total_rows == 0:
         logging.info("Input file is empty. No processing needed.")
-        # Write an empty output file consistent with expected columns
-        empty_df_cols = list(full_input_df.columns) + ['MFE']
+        empty_df_cols = list(full_input_df.columns) + ["mfe"]
         if include_structure:
-            empty_df_cols.append('Structure')
+            empty_df_cols.append("structure")
         empty_df = pd.DataFrame(columns=empty_df_cols)
-        write_output_file(empty_df, output_file) # Handles single or batch naming
+        write_output_file(empty_df, output_file)
         return empty_df
 
     if sequence_col not in full_input_df.columns:
-        logging.error(f"Sequence column '{sequence_col}' not found in input file '{input_file}'.")
+        logging.error(f"Sequence column '{sequence_col}' not found in input file.")
         raise KeyError(f"Sequence column '{sequence_col}' not found.")
 
-    # --- Initialize final DataFrame that will hold all results ---
     final_results_df = full_input_df.copy()
-    final_results_df['MFE'] = pd.NA
+    final_results_df["mfe"] = pd.NA
     if include_structure:
-        final_results_df['Structure'] = pd.NA
+        final_results_df["structure"] = pd.NA
 
-    # --- Checkpointing and Identifying Rows for Calculation (Batch Mode Only) ---
-    rows_needing_calculation_indices = list(range(total_rows)) # Initially, all rows
+    rows_needing_calculation_indices = set(range(total_rows))
 
     if batch_size > 0:
         logging.info("--- Checkpoint Scan (Batch Mode) ---")
         num_expected_batches = math.ceil(total_rows / batch_size)
         output_base, output_ext_for_file = os.path.splitext(output_file)
-        
-        processed_rows_from_checkpoints = 0
 
+        processed_rows_from_checkpoints = 0
         for i in range(num_expected_batches):
             batch_start_orig_idx = i * batch_size
             batch_end_orig_idx = min((i + 1) * batch_size, total_rows)
-            
-            batch_start_num_fn = batch_start_orig_idx + 1
-            batch_end_num_fn = batch_end_orig_idx
-
-            batch_filename = f"{output_base}_{batch_start_num_fn}-{batch_end_num_fn}{output_ext_for_file}"
+            batch_filename = f"{output_base}_{batch_start_orig_idx + 1}-{batch_end_orig_idx}{output_ext_for_file}"
 
             if os.path.exists(batch_filename):
-                logging.info(f"Found potential checkpoint file: {batch_filename}")
-                df_checkpoint = load_checkpoint_batch(batch_filename, include_structure, sequence_col)
-                if df_checkpoint is not None:
-                    expected_batch_len = batch_end_orig_idx - batch_start_orig_idx
-                    if len(df_checkpoint) == expected_batch_len:
-                        logging.info(f"Valid checkpoint loaded for batch {i+1} (rows {batch_start_num_fn}-{batch_end_num_fn}).")
-                        for j in range(len(df_checkpoint)):
-                            original_row_idx = batch_start_orig_idx + j
-                            final_results_df.loc[original_row_idx, 'MFE'] = df_checkpoint.iloc[j]['MFE']
-                            if include_structure:
-                                final_results_df.loc[original_row_idx, 'Structure'] = df_checkpoint.iloc[j]['Structure']
-                        
-                        for k_idx in range(batch_start_orig_idx, batch_end_orig_idx):
-                            if k_idx in rows_needing_calculation_indices:
-                                rows_needing_calculation_indices.remove(k_idx)
-                        processed_rows_from_checkpoints += len(df_checkpoint)
-                    else:
-                        logging.warning(f"Checkpoint file '{batch_filename}' has {len(df_checkpoint)} rows, expected {expected_batch_len}. Will re-process this batch's rows if not covered by other valid checkpoints.")
-        
+                df_checkpoint = load_checkpoint_batch(
+                    batch_filename, include_structure, sequence_col
+                )
+                if df_checkpoint is not None and len(df_checkpoint) == (
+                    batch_end_orig_idx - batch_start_orig_idx
+                ):
+                    logging.info(
+                        f"Valid checkpoint loaded for rows {batch_start_orig_idx + 1}-{batch_end_orig_idx}."
+                    )
+                    indices_to_update = range(batch_start_orig_idx, batch_end_orig_idx)
+                    final_results_df.loc[indices_to_update, "mfe"] = df_checkpoint["mfe"].values
+                    if include_structure:
+                        final_results_df.loc[indices_to_update, "structure"] = df_checkpoint[
+                            "structure"
+                        ].values
+                    rows_needing_calculation_indices.difference_update(indices_to_update)
+                    processed_rows_from_checkpoints += len(df_checkpoint)
+
         if processed_rows_from_checkpoints > 0:
-            logging.info(f"{processed_rows_from_checkpoints} rows' data loaded from existing checkpoints.")
-        logging.info(f"{len(rows_needing_calculation_indices)} rows will be processed/re-processed.")
+            logging.info(f"{processed_rows_from_checkpoints} rows' data loaded from checkpoints.")
+        logging.info(f"{len(rows_needing_calculation_indices)} rows will be processed.")
         logging.info("--- End Checkpoint Scan ---")
 
-    # --- Perform Calculations for Remaining Rows ---
     if rows_needing_calculation_indices:
-        df_to_calculate = full_input_df.iloc[rows_needing_calculation_indices].copy()
-        try:
-            calculated_data_df = calculate_all_mfe_and_structure(
-                df_to_calculate,
-                sequence_col=sequence_col,
-                include_structure=include_structure,
-                num_processes=num_processes
-            )
-            # Merge calculated data back into final_results_df using original indices
-            for original_idx in rows_needing_calculation_indices:
-                if original_idx in calculated_data_df.index:
-                    final_results_df.loc[original_idx, 'MFE'] = calculated_data_df.loc[original_idx, 'MFE']
-                    if include_structure:
-                        final_results_df.loc[original_idx, 'Structure'] = calculated_data_df.loc[original_idx, 'Structure']
-        except KeyError as e: 
-            logging.error(f"Error during calculation setup (likely missing sequence column '{sequence_col}'): {e}", exc_info=True)
-            sys.exit(1)
-        except Exception as e:
-            logging.error(f"An unexpected error occurred during main calculation phase: {e}", exc_info=True)
-            sys.exit(1)
-    else:
-        logging.info("No new rows to calculate. All data potentially loaded from checkpoints or input was empty.")
+        rows_to_calc_list = sorted(list(rows_needing_calculation_indices))
+        df_to_calculate = full_input_df.iloc[rows_to_calc_list].copy()
 
-    # --- Write Output (Batch or Single File) using the fully assembled final_results_df ---
+        # The index of df_to_calculate corresponds to the original row numbers
+        calculated_data_df = calculate_all_mfe_and_structure(
+            df_to_calculate,
+            sequence_col=sequence_col,
+            include_structure=include_structure,
+            num_processes=num_processes,
+            show_progress=show_progress,
+            quiet=quiet,
+        )
+        # Update final_results_df using the original index from calculated_data_df
+        final_results_df.update(calculated_data_df)
+
+    else:
+        logging.info("No new rows to calculate.")
+
     if batch_size > 0:
         logging.info(f"--- Writing Output in Batches ({batch_size} rows/batch) ---")
         num_output_batches = math.ceil(total_rows / batch_size)
@@ -443,16 +588,11 @@ def process_mfe_calculations(
         for i in range(num_output_batches):
             start_row_idx = i * batch_size
             end_row_idx = min((i + 1) * batch_size, total_rows)
-            
-            start_row_num_fn = start_row_idx + 1
-            end_row_num_fn = end_row_idx
-            
-            logging.info(f"Preparing batch {i+1}/{num_output_batches} for writing (Original Rows {start_row_num_fn}-{end_row_num_fn})")
             df_chunk_to_write = final_results_df.iloc[start_row_idx:end_row_idx]
-            batch_filename = f"{output_base}_{start_row_num_fn}-{end_row_num_fn}{output_ext_for_file}"
+            batch_filename = f"{output_base}_{start_row_idx + 1}-{end_row_idx}{output_ext_for_file}"
             write_output_file(df_chunk_to_write, batch_filename)
         logging.info("--- All batches written. ---")
-    else: 
+    else:
         logging.info("--- Writing Output to Single File ---")
         write_output_file(final_results_df, output_file)
 
@@ -460,37 +600,63 @@ def process_mfe_calculations(
     return final_results_df
 
 
-def main():
-    """Command-line interface for MFE calculation script."""
+def main() -> int:
+    """
+    Command-line interface for MFE calculation script.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
+    """
     parser = argparse.ArgumentParser(
-        description="Calculate MFE and optionally RNA secondary structure for sequences in a file. "
-                    "Supports CSV, TSV, and Parquet input/output. Enables checkpointing for batch mode.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="Calculate MFE and optionally RNA secondary structure for sequences in a file using LinearFold.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("input_file", help="Path to the input file (.csv, .tsv, .parquet) containing sequences.")
-    parser.add_argument("output_file", help="Path/base name for the output file(s). Extension determines format.")
-    parser.add_argument("-s", "--sequence_col", default="Sequence", 
-                        help="Name of the column containing RNA sequences.")
-    parser.add_argument("--include_structure", action="store_true", 
-                        help="Include the dot-bracket RNA secondary structure in the output.")
-    parser.add_argument("-b", "--batch_size", type=int, default=0, 
-                        help="Batch size for processing and output files. If 0, a single output file is created. "
-                             "A non-zero value enables checkpointing, where completed batch files are not re-processed.")
-    parser.add_argument("--num_processes", "-p", type=int, default=None,
-                        help="Number of parallel processes to use for calculations. Defaults to all available CPU cores.")
-    parser.add_argument("--log_level", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], 
-                        default="INFO", help="Set the logging level.")
+    parser.add_argument(
+        "input_file", help="Path to the input file (.csv, .tsv, .parquet, .fa, .fasta, .fna, .fas)."
+    )
+    parser.add_argument("output_file", help="Path/base name for the output file(s).")
+    parser.add_argument(
+        "-s", "--sequence_col", default="Sequence", help="Name of the column with RNA sequences."
+    )
+    parser.add_argument(
+        "--include_structure", action="store_true", help="Include dot-bracket structure in output."
+    )
+    parser.add_argument(
+        "-b",
+        "--batch_size",
+        type=int,
+        default=0,
+        help="Batch size for processing. 0 means single output. >0 enables checkpointing.",
+    )
+    parser.add_argument(
+        "--num_processes",
+        "-p",
+        type=int,
+        default=None,
+        help="Number of parallel processes. Defaults to all CPU cores.",
+    )
+    parser.add_argument(
+        "--log_level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Set logging level.",
+    )
+    
+    # Add progress-related CLI arguments
+    update_cli_args(parser)
 
     args = parser.parse_args()
-
     setup_logging(args.log_level)
+    
+    # Resolve progress settings from CLI arguments
+    progress_settings = resolve_progress_settings(args)
 
-    # PyArrow availability message after logging is set up
     if pyarrow_available:
-        logging.info("'pyarrow' package found. Will be used for Parquet files and optionally for CSV/TSV I/O.")
+        logging.info("'pyarrow' package found. Used for Parquet and can accelerate CSV/TSV I/O.")
     else:
-        logging.warning("'pyarrow' package not found. Parquet file support (.parquet) will be unavailable. CSV/TSV I/O might be slower.")
-        logging.warning("Install with: pip install pandas pyarrow")
+        logging.warning(
+            "'pyarrow' not found. Parquet support is unavailable. Install with: pip install pandas pyarrow"
+        )
 
     try:
         process_mfe_calculations(
@@ -499,22 +665,16 @@ def main():
             sequence_col=args.sequence_col,
             include_structure=args.include_structure,
             batch_size=args.batch_size,
-            num_processes=args.num_processes
+            num_processes=args.num_processes,
+            **progress_settings,
         )
         logging.info("Script finished successfully.")
-    except FileNotFoundError as e:
-        logging.error(f"File not found: {e}")
-        sys.exit(1)
-    except KeyError as e:
-        logging.error(f"Column-related error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        logging.error(f"An unexpected error occurred: {e}", exc_info=True)
-        sys.exit(1)
+        return 0
+    except (FileNotFoundError, KeyError, Exception) as e:
+        logging.error(f"A critical error occurred: {e}", exc_info=(args.log_level == "DEBUG"))
+        return 1
 
-# --- Run Main Function ---    
+
 if __name__ == "__main__":
-    # freeze_support() is necessary for Windows when using multiprocessing
-    # and creating executables (e.g. with PyInstaller).
-    multiprocessing.freeze_support() 
-    main()
+    multiprocessing.freeze_support()
+    sys.exit(main())

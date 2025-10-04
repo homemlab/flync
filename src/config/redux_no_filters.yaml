@@ -6,12 +6,12 @@ global_defaults:
   optimization_direction: "maximize"
   n_trials: 50
   random_state: 99
-  job_timeout: 3600
+  job_timeout: 7200
   delay_between_jobs: 30
   project_name: "Flync Feature and Hyperparameter Optimization"
   debug: true
   threads: 20
-  top_n: 3  # Number of top models to train and evaluate on holdout data
+  top_n: 1  # Number of top models to train and evaluate on holdout data
 
 # Storage configuration (optional - can be overridden per config)
 storage:
@@ -19,14 +19,14 @@ storage:
   storage_url: "sqlite:///optuna.db"
 
 # Default models and metrics (can be overridden per config)
-default_models: ["randomforest", "xgboost", "lightgbm", "ebm"]
+default_models: ["xgboost", "lightgbm", "ebm"] # Not testing randomforest to reduce runtime, as it is less promising
 default_metric_combinations:
-  - ["f1"]
+  - ["precision", "f1"]
 
 # Dataset configurations - each represents a different dataset with its own parameters
 dataset_configs:
   
-  redux_raw:
+  OPT_redux_raw:
     name: "k-mer redux raw dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No feature selection applied"
     
@@ -35,10 +35,10 @@ dataset_configs:
     test_data: "src/data/X_test_redux.parquet"
     holdout_data: "src/data/X_val_redux.parquet"
     target_column: "y"
-    dataset_suffix: "redux_raw"
+    dataset_suffix: "OPT_redux_raw"
     
     # Experiment configuration
-    experiment_name: "redux_raw"
+    experiment_name: "OPT_redux_raw"
     
     # Feature correlation analysis
     #analyze_correlations: true
@@ -57,7 +57,7 @@ dataset_configs:
       features_ss: "true"
       features_filter: "none"
   
-  redux_raw_corr:
+  OPT_redux_raw_corr:
     name: "k-mer redux raw dataset with correlation analysis"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Automatic correlation analysis applied"
     
@@ -66,10 +66,10 @@ dataset_configs:
     test_data: "src/data/X_test_redux.parquet"
     holdout_data: "src/data/X_val_redux.parquet"
     target_column: "y"
-    dataset_suffix: "redux_raw"
+    dataset_suffix: "OPT_redux_raw"
     
     # Experiment configuration
-    experiment_name: "redux_raw"
+    experiment_name: "OPT_redux_raw"
     
     # Feature correlation analysis
     analyze_correlations: true
@@ -85,7 +85,66 @@ dataset_configs:
       features_ss: "true"
       features_filter: "none"
 
-  redux_raw_smote:
+  OPT_redux_raw_no_CPAT:
+    name: "k-mer redux raw dataset + No CPAT features"
+    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No feature selection applied. Additionally dropped CPAT features."
+    
+    # Dataset paths
+    train_data: "src/data/X_train_redux_no_CPAT.parquet"
+    test_data: "src/data/X_test_redux_no_CPAT.parquet"
+    holdout_data: "src/data/X_val_redux_no_CPAT.parquet"
+    target_column: "y"
+    dataset_suffix: "OPT_redux_raw"
+    
+    # Experiment configuration
+    experiment_name: "OPT_redux_raw"
+    
+    # Feature correlation analysis
+    #analyze_correlations: true
+    #correlation_threshold: 0.95
+    # Alternative: drop_features_file: "features_to_drop.txt"
+    
+    # Train top 3 models for this dataset
+    top_n: 3
+    
+    # Tags specific to this dataset
+    tags:
+      dataset_imbalance_technique: "none"
+      dataset_kmer_redux: "true"
+      features_cpat: "false"
+      features_regulators_mhe: "all"
+      features_ss: "true"
+      features_filter: "none"
+  
+  OPT_redux_raw_corr_no_CPAT:
+    name: "k-mer redux raw dataset with correlation analysis"
+    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Automatic correlation analysis applied. No feature selection applied. Additionally dropped CPAT features."
+    
+    # Dataset paths
+    train_data: "src/data/X_train_redux_no_CPAT.parquet"
+    test_data: "src/data/X_test_redux_no_CPAT.parquet"
+    holdout_data: "src/data/X_val_redux_no_CPAT.parquet"
+    target_column: "y"
+    dataset_suffix: "OPT_redux_raw"
+    
+    # Experiment configuration
+    experiment_name: "OPT_redux_raw"
+    
+    # Feature correlation analysis
+    analyze_correlations: true
+    correlation_threshold: 0.95
+    # Alternative: drop_features_file: "features_to_drop.txt"
+    
+    # Tags specific to this dataset
+    tags:
+      dataset_imbalance_technique: "none"
+      dataset_kmer_redux: "true"
+      features_cpat: "false"
+      features_regulators_mhe: "all"
+      features_ss: "true"
+      features_filter: "none"
+
+  OPT_redux_raw_smote:
     name: "k-mer redux raw SMOTE dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No feature selection applied. SMOTE applied to balance classes."
     
@@ -94,10 +153,10 @@ dataset_configs:
     test_data: "src/data/X_test_redux.parquet"
     holdout_data: "src/data/X_val_redux.parquet"
     target_column: "y"
-    dataset_suffix: "redux_smote"
+    dataset_suffix: "OPT_redux_raw_smote"
 
     # Experiment configuration
-    experiment_name: "redux_smote"
+    experiment_name: "OPT_redux_raw_smote"
 
     # Feature correlation analysis
     #analyze_correlations: true
@@ -116,35 +175,7 @@ dataset_configs:
       features_ss: "true"
       features_filter: "none"
 
-  redux_raw_corr_smote:
-    name: "k-mer redux raw SMOTE dataset"
-    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Automatic corelation analysis applied. SMOTE applied to balance classes."
-    
-    # Dataset paths
-    train_data: "src/data/X_train_redux_smote.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
-    target_column: "y"
-    dataset_suffix: "redux_smote"
-
-    # Experiment configuration
-    experiment_name: "redux_smote"
-
-    # Feature correlation analysis
-    analyze_correlations: true
-    correlation_threshold: 0.95
-    # Alternative: drop_features_file: "features_to_drop.txt"
-    
-    # Tags specific to this dataset
-    tags:
-      dataset_imbalance_technique: "smote"
-      dataset_kmer_redux: "true"
-      features_cpat: "true"
-      features_regulators_mhe: "all"
-      features_ss: "true"
-      features_filter: "none"
-
-  redux_raw_smote_tomek:
+  OPT_redux_raw_smote_tomek:
     name: "k-mer redux raw SMOTE Tomek dataset"
     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No feature selection applied. SMOTE applied to balance classes. Tomek links applied to clean the dataset."
     
@@ -153,42 +184,14 @@ dataset_configs:
     test_data: "src/data/X_test_redux.parquet"
     holdout_data: "src/data/X_val_redux.parquet"
     target_column: "y"
-    dataset_suffix: "redux_smote_tomek"
+    dataset_suffix: "OPT_redux_raw_smote_tomek"
 
     # Experiment configuration
-    experiment_name: "redux_smote_tomek"
+    experiment_name: "OPT_redux_raw_smote_tomek"
 
     # Feature correlation analysis
     #analyze_correlations: true
     #correlation_threshold: 0.95
-    # Alternative: drop_features_file: "features_to_drop.txt"
-    
-    # Tags specific to this dataset
-    tags:
-      dataset_imbalance_technique: "smote_tomek"
-      dataset_kmer_redux: "true"
-      features_cpat: "true"
-      features_regulators_mhe: "all"
-      features_ss: "true"
-      features_filter: "none"
-
-  redux_raw_corr_smote_tomek:
-    name: "k-mer redux raw SMOTE Tomek dataset"
-    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Automatic corelation analysis applied. SMOTE applied to balance classes. Tomek links applied to clean the dataset."
-
-    # Dataset paths
-    train_data: "src/data/X_train_redux_smote_tomek.parquet"
-    test_data: "src/data/X_test_redux.parquet"
-    holdout_data: "src/data/X_val_redux.parquet"
-    target_column: "y"
-    dataset_suffix: "redux_smote_tomek"
-
-    # Experiment configuration
-    experiment_name: "redux_smote_tomek"
-
-    # Feature correlation analysis
-    analyze_correlations: true
-    correlation_threshold: 0.95
     # Alternative: drop_features_file: "features_to_drop.txt"
     
     # Tags specific to this dataset

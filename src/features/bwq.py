@@ -8,15 +8,26 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 from functools import partial
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import pyBigWig
 import pyranges as pr
 import yaml
+
+# Import progress utilities
+try:
+    from src.utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings
+except ImportError:
+    # Try relative import when running as script
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings
 
 
 # --- File Manager Class ---
@@ -30,7 +41,14 @@ class BigWigFileManager:
     It uses an ExitStack to ensure proper cleanup of resources.
     """
 
-    def __init__(self, url_timeout=30, max_retries=3, base_storage_directory=None, verify_ssl=True, keep_downloaded_files=False):
+    def __init__(
+        self,
+        url_timeout=30,
+        max_retries=3,
+        base_storage_directory=None,
+        verify_ssl=True,
+        keep_downloaded_files=False,
+    ):
         """
         Initializes the BigWigFileManager.
 
@@ -82,11 +100,12 @@ class BigWigFileManager:
             str: The path to the downloaded file (target_local_path) if successful, None otherwise.
         """
         headers = {
-            "User-Agent": "BigWigQuery/1.1", # Updated version
+            "User-Agent": "BigWigQuery/1.1",  # Updated version
         }
         context = None
         if not self.verify_ssl:
             import ssl
+
             context = ssl.create_default_context()
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
@@ -120,10 +139,11 @@ class BigWigFileManager:
                         try:
                             os.unlink(target_local_path)
                         except Exception as unlink_e:
-                            logging.warning(f"Could not remove partially downloaded file {target_local_path}: {unlink_e}")
+                            logging.warning(
+                                f"Could not remove partially downloaded file {target_local_path}: {unlink_e}"
+                            )
                     return None
         return None
-
 
     def get_file_handle(self, file_path):
         """
@@ -157,39 +177,45 @@ class BigWigFileManager:
                     bw = self.exit_stack.enter_context(pyBigWig.open(persistent_path))
                     with self.handle_lock:
                         self.file_handles[file_path] = bw
-                    logging.debug(f"Using existing persistent cached file: {persistent_path} for {file_path}")
+                    logging.debug(
+                        f"Using existing persistent cached file: {persistent_path} for {file_path}"
+                    )
                     return bw
                 except Exception as e:
-                    logging.error(f"Error opening cached file {persistent_path} for {file_path}: {e}")
+                    logging.error(
+                        f"Error opening cached file {persistent_path} for {file_path}: {e}"
+                    )
                     # If cache file is corrupted, fallback to download logic below
 
             # For URLs, we need to handle downloading with thread safety
             with self.download_lock:
-                if file_path in self.file_handles: # Double check, might have been opened by another thread
+                if (
+                    file_path in self.file_handles
+                ):  # Double check, might have been opened by another thread
                     return self.file_handles[file_path]
                 if file_path in self.downloading:
-                    logging.debug(f"Waiting for {file_path} to be downloaded by another thread (initial check)")
+                    logging.debug(
+                        f"Waiting for {file_path} to be downloaded by another thread (initial check)"
+                    )
                     # Fall through to wait logic outside this lock
                 else:
                     # Mark this URL as being downloaded by THIS thread if not already marked
                     self.downloading.add(file_path)
 
-
             # Wait for the file to be downloaded by another thread if it was marked by another thread
             # This loop handles the case where another thread started the download just before this one.
             is_being_downloaded_by_other = False
-            with self.download_lock: # Check self.downloading under lock
-                 if file_path not in self.file_handles and file_path in self.downloading:
-                      # If it's in self.downloading but not yet in self.file_handles,
-                      # and this thread is NOT the one that added it (implicit: means another thread did)
-                      # This logic is tricky because we don't store *which* thread is downloading.
-                      # A simpler approach might be to always wait if in self.downloading and not in self.file_handles.
-                      # For now, assume if it's in downloading, we wait.
-                      is_being_downloaded_by_other = True
-
+            with self.download_lock:  # Check self.downloading under lock
+                if file_path not in self.file_handles and file_path in self.downloading:
+                    # If it's in self.downloading but not yet in self.file_handles,
+                    # and this thread is NOT the one that added it (implicit: means another thread did)
+                    # This logic is tricky because we don't store *which* thread is downloading.
+                    # A simpler approach might be to always wait if in self.downloading and not in self.file_handles.
+                    # For now, assume if it's in downloading, we wait.
+                    is_being_downloaded_by_other = True
 
             if is_being_downloaded_by_other:
-                max_wait_attempts = 60 # e.g., 30 seconds if sleep is 0.5s
+                max_wait_attempts = 60  # e.g., 30 seconds if sleep is 0.5s
                 for attempt in range(max_wait_attempts):
                     # If persistent cache file now exists (created by another thread), open it directly
                     if os.path.exists(persistent_path):
@@ -197,12 +223,18 @@ class BigWigFileManager:
                             bw = self.exit_stack.enter_context(pyBigWig.open(persistent_path))
                             with self.handle_lock:
                                 self.file_handles[file_path] = bw
-                            logging.debug(f"Using existing persistent cached file: {persistent_path} for {file_path}")
+                            logging.debug(
+                                f"Using existing persistent cached file: {persistent_path} for {file_path}"
+                            )
                             return bw
                         except Exception as e:
-                            logging.error(f"Error opening cached file {persistent_path} for {file_path}: {e}")
+                            logging.error(
+                                f"Error opening cached file {persistent_path} for {file_path}: {e}"
+                            )
                             break
-                    logging.debug(f"Waiting for {file_path} (attempt {attempt+1}/{max_wait_attempts}) to be downloaded by another thread.")
+                    logging.debug(
+                        f"Waiting for {file_path} (attempt {attempt+1}/{max_wait_attempts}) to be downloaded by another thread."
+                    )
                     time.sleep(0.5)  # Short wait
                     with self.handle_lock:
                         if file_path in self.file_handles:
@@ -210,12 +242,15 @@ class BigWigFileManager:
                     # Check if the download completed or failed by another thread
                     with self.download_lock:
                         if file_path not in self.downloading and file_path not in self.file_handles:
-                            logging.warning(f"Download of {file_path} by another thread seems to have failed or completed without handle. This thread will attempt.")
-                            break # Exit wait loop and attempt download
-                else: # If loop completes without returning
-                    logging.warning(f"Timeout waiting for {file_path} download from another thread. This thread will attempt.")
+                            logging.warning(
+                                f"Download of {file_path} by another thread seems to have failed or completed without handle. This thread will attempt."
+                            )
+                            break  # Exit wait loop and attempt download
+                else:  # If loop completes without returning
+                    logging.warning(
+                        f"Timeout waiting for {file_path} download from another thread. This thread will attempt."
+                    )
                     # Proceed to attempt download by this thread if timeout occurs
-
 
             # Re-check and start downloading if necessary by this thread
             actual_file_to_open = None
@@ -223,35 +258,42 @@ class BigWigFileManager:
                 # Ensure this thread is marked as downloader if it's going to download
                 # This re-acquires download_lock to ensure atomicity of check-and-set for downloading status
                 with self.download_lock:
-                    if file_path in self.file_handles: # Check again, might have been opened while waiting
+                    if (
+                        file_path in self.file_handles
+                    ):  # Check again, might have been opened while waiting
                         return self.file_handles[file_path]
                     # If not in downloading, this thread claims it. If already in (by this thread), it's fine.
                     self.downloading.add(file_path)
 
-
                 # Always check persistent cache first, regardless of keep_downloaded_files setting.
                 persistent_path = self._get_persistent_cache_path(file_path)
                 if os.path.exists(persistent_path):
-                    logging.debug(f"Using existing persistent cached file: {persistent_path} for {file_path}")
+                    logging.debug(
+                        f"Using existing persistent cached file: {persistent_path} for {file_path}"
+                    )
                     actual_file_to_open = persistent_path
                 elif self.keep_downloaded_files:
                     logging.info(f"Downloading {file_path} to persistent cache: {persistent_path}")
                     actual_file_to_open = self._perform_download(file_path, persistent_path)
-                else: # Not keeping files, and not in cache, so download to a transient temp file
+                else:  # Not keeping files, and not in cache, so download to a transient temp file
                     temp_fd, temp_path_for_download = tempfile.mkstemp(
-                        suffix=os.path.splitext(file_path)[1] or ".bwqtmp", # Ensure suffix
-                        dir=self.transient_temp_dir
+                        suffix=os.path.splitext(file_path)[1] or ".bwqtmp",  # Ensure suffix
+                        dir=self.transient_temp_dir,
                     )
-                    os.close(temp_fd) # We only need the path for _perform_download
+                    os.close(temp_fd)  # We only need the path for _perform_download
 
-                    logging.info(f"Downloading {file_path} to transient temp file: {temp_path_for_download}")
+                    logging.info(
+                        f"Downloading {file_path} to transient temp file: {temp_path_for_download}"
+                    )
                     actual_file_to_open = self._perform_download(file_path, temp_path_for_download)
                     if actual_file_to_open:
-                        self.transient_files_to_delete.append(actual_file_to_open) # Mark for deletion
+                        self.transient_files_to_delete.append(
+                            actual_file_to_open
+                        )  # Mark for deletion
 
                 if actual_file_to_open is None:
                     logging.error(f"Failed to obtain local file for {file_path}")
-                    with self.download_lock: # Ensure cleanup from downloading set on failure
+                    with self.download_lock:  # Ensure cleanup from downloading set on failure
                         if file_path in self.downloading:
                             self.downloading.remove(file_path)
                     return None
@@ -261,17 +303,19 @@ class BigWigFileManager:
 
                 with self.handle_lock:
                     self.file_handles[file_path] = bw
-                
+
                 # Remove from downloading set *after* successfully adding to handles
                 with self.download_lock:
                     if file_path in self.downloading:
-                         self.downloading.remove(file_path)
+                        self.downloading.remove(file_path)
 
-                logging.info(f"Successfully opened remote BigWig/BigBed file: {file_path} (from {actual_file_to_open})")
+                logging.info(
+                    f"Successfully opened remote BigWig/BigBed file: {file_path} (from {actual_file_to_open})"
+                )
                 return bw
             except Exception as e:
                 logging.error(f"Error opening or processing remote file {file_path}: {e}")
-                with self.download_lock: # Ensure cleanup from downloading set on exception
+                with self.download_lock:  # Ensure cleanup from downloading set on exception
                     if file_path in self.downloading:
                         self.downloading.remove(file_path)
                 return None
@@ -286,7 +330,7 @@ class BigWigFileManager:
                 logging.error(f"Error opening file {file_path}: {e}")
                 return None
 
-    def preload_remote_files(self, file_paths):
+    def preload_remote_files(self, file_paths, progress_bar=None):
         """
         Attempts to download and open handles for all unique remote URLs in the given list.
 
@@ -295,6 +339,7 @@ class BigWigFileManager:
 
         Args:
             file_paths (list[str]): A list of file paths or URLs. Only URLs will be preloaded.
+            progress_bar: Optional progress bar to update during preloading.
 
         Returns:
             int: The number of remote files successfully preloaded (downloaded and opened).
@@ -315,14 +360,15 @@ class BigWigFileManager:
             return 0
 
         logging.info(f"Attempting to preload {len(remote_urls)} remote files...")
-        
+
         # Parallel preloading for better performance
         if len(remote_urls) > 1:
             max_preload_workers = min(len(remote_urls), 4)  # Limit concurrent downloads
             with ThreadPoolExecutor(max_workers=max_preload_workers) as preload_executor:
-                preload_futures = {preload_executor.submit(self.get_file_handle, url): url 
-                                 for url in remote_urls}
-                
+                preload_futures = {
+                    preload_executor.submit(self.get_file_handle, url): url for url in remote_urls
+                }
+
                 for future in as_completed(preload_futures):
                     url = preload_futures[future]
                     try:
@@ -332,6 +378,11 @@ class BigWigFileManager:
                             logging.warning(f"Failed to preload remote file: {url}")
                     except Exception as e:
                         logging.warning(f"Failed to preload remote file {url}: {e}")
+                    
+                    # Update progress bar if provided
+                    if progress_bar:
+                        progress_bar.update(1)
+                        
         else:
             # Single file - no need for thread pool overhead
             for url in remote_urls:
@@ -339,6 +390,10 @@ class BigWigFileManager:
                     success_count += 1
                 else:
                     logging.warning(f"Failed to preload remote file: {url}")
+                
+                # Update progress bar if provided
+                if progress_bar:
+                    progress_bar.update(1)
 
         logging.info(f"Preloaded {success_count}/{len(remote_urls)} remote files")
         return success_count
@@ -361,7 +416,9 @@ class BigWigFileManager:
     def clear_persistent_cache(self):
         """Removes all files from the persistent cache directory managed by this instance."""
         if not os.path.exists(self.persistent_cache_dir):
-            logging.info(f"Persistent cache directory {self.persistent_cache_dir} does not exist. Nothing to clear.")
+            logging.info(
+                f"Persistent cache directory {self.persistent_cache_dir} does not exist. Nothing to clear."
+            )
             return
 
         logging.info(f"Clearing persistent cache directory: {self.persistent_cache_dir}")
@@ -375,16 +432,18 @@ class BigWigFileManager:
                     if os.path.isfile(file_path) or os.path.islink(file_path):
                         os.unlink(file_path)
                         cleared_count += 1
-                    elif os.path.isdir(file_path): # Should not happen with current naming
+                    elif os.path.isdir(file_path):  # Should not happen with current naming
                         shutil.rmtree(file_path)
-                        cleared_count +=1
+                        cleared_count += 1
                 else:
                     logging.debug(f"Skipping non-cache file in cache directory: {filename}")
             except Exception as e:
                 logging.warning(f"Failed to delete {file_path} from cache: {e}")
                 error_count += 1
         if cleared_count > 0 or error_count > 0:
-            logging.info(f"Cleared {cleared_count} items from persistent cache. Encountered {error_count} errors.")
+            logging.info(
+                f"Cleared {cleared_count} items from persistent cache. Encountered {error_count} errors."
+            )
         else:
             logging.info("Persistent cache was empty or contained no matching files.")
 
@@ -402,7 +461,8 @@ def setup_logging(log_level):
         raise ValueError(f"Invalid log level: {log_level}")
 
     logging.basicConfig(
-        level=numeric_level, format="%(asctime)s - %(levelname)s - %(module)s - %(message)s" # Added module
+        level=numeric_level,
+        format="%(asctime)s - %(levelname)s - %(module)s - %(message)s",  # Added module
     )
     logging.info(f"Logging initialized at level: {log_level}")
 
@@ -438,9 +498,7 @@ def load_config_from_yaml(yaml_path):
                 config_data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         logging.error(f"Error parsing YAML configuration file {yaml_path}: {e}")
-        raise ValueError(
-            f"Error parsing YAML configuration file {yaml_path}: {e}"
-        ) from e
+        raise ValueError(f"Error parsing YAML configuration file {yaml_path}: {e}") from e
     except Exception as e:
         logging.error(f"Error reading configuration file {yaml_path}: {e}")
         raise IOError(f"Error reading configuration file {yaml_path}: {e}") from e
@@ -456,24 +514,21 @@ def load_config_from_yaml(yaml_path):
     valid_numerical_stats = ["mean", "max", "min", "coverage", "std", "sum"]
     valid_special_stats = ["extract_names"]
 
-
     for i, item in enumerate(config_data):
         if not isinstance(item, dict):
             logging.error(f"Item #{i+1} in config is not a dictionary. Config: {item}")
             raise ValueError(f"Item #{i+1} in config must be a dictionary.")
 
         if "path" not in item or not isinstance(item["path"], str) or not item["path"]:
-            logging.error(
-                f"Item #{i+1} in config has invalid or missing 'path'. Config: {item}"
-            )
+            logging.error(f"Item #{i+1} in config has invalid or missing 'path'. Config: {item}")
             raise ValueError(f"Item #{i+1} in config has invalid or missing 'path'.")
 
         file_path = item["path"]
-        
+
         # Parse optional range expansion parameters
         upstream = item.get("upstream", 0)  # Default to 0 (no expansion)
         downstream = item.get("downstream", 0)  # Default to 0 (no expansion)
-        
+
         # Validate expansion parameters
         if not isinstance(upstream, int) or upstream < 0:
             logging.warning(
@@ -485,13 +540,13 @@ def load_config_from_yaml(yaml_path):
                 f"Invalid 'downstream' value in config item #{i+1}: {downstream}. Must be a non-negative integer. Using 0."
             )
             downstream = 0
-        
+
         # Path existence for local files is checked by file manager later, but good to warn early if possible
         # if not is_url(file_path) and not os.path.exists(file_path):
         #     logging.warning(
         #         f"File specified in config item #{i+1} not found locally: {file_path}. Will attempt to open."
         #     )
-            # No longer raising FileNotFoundError here, let BigWigFileManager handle it.
+        # No longer raising FileNotFoundError here, let BigWigFileManager handle it.
 
         if "stats" not in item or not isinstance(item["stats"], list):
             logging.error(f"Item #{i+1} 'stats' must be a list. Config: {item}")
@@ -502,22 +557,22 @@ def load_config_from_yaml(yaml_path):
                 logging.error(
                     f"Stat item #{j+1} in item #{i+1} is not a dictionary. Config: {stat_item}"
                 )
-                continue # Skip this malformed stat_item
+                continue  # Skip this malformed stat_item
 
             if "stat" not in stat_item or "name" not in stat_item:
                 logging.error(
                     f"Stat item #{j+1} in item #{i+1} missing 'stat' or 'name'. Config: {stat_item}"
                 )
-                continue # Skip
+                continue  # Skip
 
             current_stat = stat_item["stat"]
             current_name = stat_item["name"]
             config_entry = {
-                "path": file_path, 
-                "stat": current_stat, 
+                "path": file_path,
+                "stat": current_stat,
                 "name": current_name,
                 "upstream": upstream,
-                "downstream": downstream
+                "downstream": downstream,
             }
 
             if current_stat in valid_numerical_stats:
@@ -525,7 +580,9 @@ def load_config_from_yaml(yaml_path):
             elif current_stat in valid_special_stats:
                 if current_stat == "extract_names":
                     # For extract_names, optionally get name_field_index
-                    name_field_index = stat_item.get("name_field_index", 3) # Default to 3 (4th field)
+                    name_field_index = stat_item.get(
+                        "name_field_index", 3
+                    )  # Default to 3 (4th field)
                     if not isinstance(name_field_index, int) or name_field_index < 0:
                         logging.error(
                             f"Invalid 'name_field_index' for 'extract_names' in item #{i+1}, stat #{j+1}. "
@@ -540,10 +597,12 @@ def load_config_from_yaml(yaml_path):
                     f"Supported numerical stats are: {', '.join(valid_numerical_stats)}. "
                     f"Supported special stats are: {', '.join(valid_special_stats)}."
                 )
-                continue # Skip unsupported stat
+                continue  # Skip unsupported stat
 
     if not expanded_configs:
-        logging.warning(f"No valid stat configurations were loaded from {yaml_path}. Output might be empty.")
+        logging.warning(
+            f"No valid stat configurations were loaded from {yaml_path}. Output might be empty."
+        )
     else:
         logging.info(
             f"Loaded {len(expanded_configs)} stat/extraction configurations from {yaml_path}"
@@ -563,7 +622,7 @@ def read_ranges_from_bed(bed_file_path):
     try:
         # Read with standard BED columns, then select what we need.
         # Pyranges might infer column names; if 4th col is name, it often becomes 'Name'.
-        gr = pr.read_bed(bed_file_path, as_df=True) # Read as DataFrame to access columns easily
+        gr = pr.read_bed(bed_file_path, as_df=True)  # Read as DataFrame to access columns easily
         if not gr.empty:
             # Ensure required columns exist. Pyranges uses Chromosome, Start, End.
             # The 4th BED column is typically for 'name'. If no header, it might be col_3.
@@ -576,73 +635,95 @@ def read_ranges_from_bed(bed_file_path):
             # Pyranges DataFrame usually has 'Chromosome', 'Start', 'End'.
             # The 4th column (name) might be 'Name' or an unnamed column if no header.
             # If 'Name' column exists from pyranges parsing:
-            if 'Name' in gr.columns:
-                gr_subset = gr[['Chromosome', 'Start', 'End', 'Name']].copy()
-            elif len(gr.columns) >= 4 and gr.columns[3] != 'Score': # Check if 4th column exists and is not score
-                 # If BED has no header, pyranges might name it like 'df.columns[3]'
-                 # This is a bit heuristic. The manual parser is more reliable for unheaded/simple BED.
-                 gr_subset = gr[['Chromosome', 'Start', 'End', gr.columns[3]]].copy()
-                 gr_subset.rename(columns={gr.columns[3]: 'Name'}, inplace=True) # Standardize to 'Name'
-            else: # Fallback if name column is not clear, create a default '.'
-                 gr_subset = gr[['Chromosome', 'Start', 'End']].copy()
-                 gr_subset['Name'] = '.'
-
+            if "Name" in gr.columns:
+                gr_subset = gr[["Chromosome", "Start", "End", "Name"]].copy()
+            elif (
+                len(gr.columns) >= 4 and gr.columns[3] != "Score"
+            ):  # Check if 4th column exists and is not score
+                # If BED has no header, pyranges might name it like 'df.columns[3]'
+                # This is a bit heuristic. The manual parser is more reliable for unheaded/simple BED.
+                gr_subset = gr[["Chromosome", "Start", "End", gr.columns[3]]].copy()
+                gr_subset.rename(
+                    columns={gr.columns[3]: "Name"}, inplace=True
+                )  # Standardize to 'Name'
+            else:  # Fallback if name column is not clear, create a default '.'
+                gr_subset = gr[["Chromosome", "Start", "End"]].copy()
+                gr_subset["Name"] = "."
 
             for _, row in gr_subset.iterrows():
-                chrom = row['Chromosome']
+                chrom = row["Chromosome"]
                 # Add 'chr' prefix if it doesn't exist (handle common UCSC/Ensembl difference)
                 chrom_str = f"chr{chrom}" if not str(chrom).startswith("chr") else str(chrom)
-                ranges.append((chrom_str, int(row['Start']), int(row['End']), row['Name']))
+                ranges.append((chrom_str, int(row["Start"]), int(row["End"]), row["Name"]))
 
             if ranges:
                 logging.info(f"Extracted {len(ranges)} ranges from {bed_file_path} using pyranges.")
                 return ranges
             else:
-                logging.warning(f"Pyranges found no ranges or failed to extract name column from {bed_file_path}. Attempting manual parsing.")
+                logging.warning(
+                    f"Pyranges found no ranges or failed to extract name column from {bed_file_path}. Attempting manual parsing."
+                )
         else:
-            logging.warning(f"Pyranges read an empty BED file: {bed_file_path}. Attempting manual parsing.")
+            logging.warning(
+                f"Pyranges read an empty BED file: {bed_file_path}. Attempting manual parsing."
+            )
 
     except Exception as e:
-        logging.warning(
-            f"Error reading BED file with pyranges: {e}. Attempting manual parsing."
-        )
-    
+        logging.warning(f"Error reading BED file with pyranges: {e}. Attempting manual parsing.")
+
     # Manual parsing fallback
-    ranges = [] # Reset ranges for manual parsing
+    ranges = []  # Reset ranges for manual parsing
     try:
         with open(bed_file_path, "r") as f:
             line_number = 0
             for line in f:
                 line_number += 1
                 line = line.strip()
-                if not line or line.startswith("#") or line.startswith("track") or line.startswith("browser"):
+                if (
+                    not line
+                    or line.startswith("#")
+                    or line.startswith("track")
+                    or line.startswith("browser")
+                ):
                     continue
                 fields = line.split("\t")
                 if len(fields) < 3:
-                    logging.warning(f"Line {line_number} in {bed_file_path} has fewer than 3 columns, skipping: {line}")
+                    logging.warning(
+                        f"Line {line_number} in {bed_file_path} has fewer than 3 columns, skipping: {line}"
+                    )
                     continue
-                
+
                 chrom = fields[0]
-                name = fields[3] if len(fields) >= 4 else f"range_{line_number}" # Use placeholder if name missing
+                name = (
+                    fields[3] if len(fields) >= 4 else f"range_{line_number}"
+                )  # Use placeholder if name missing
 
                 try:
                     start = int(fields[1])
                     end = int(fields[2])
                 except ValueError:
-                    logging.warning(f"Line {line_number} in {bed_file_path} has non-integer coordinates, skipping: {line}")
+                    logging.warning(
+                        f"Line {line_number} in {bed_file_path} has non-integer coordinates, skipping: {line}"
+                    )
                     continue
                 if start < 0 or end < 0 or start >= end:
-                    logging.warning(f"Line {line_number} in {bed_file_path} has invalid coordinates (start<0, end<0, or start>=end), skipping: {chrom}:{start}-{end}")
+                    logging.warning(
+                        f"Line {line_number} in {bed_file_path} has invalid coordinates (start<0, end<0, or start>=end), skipping: {chrom}:{start}-{end}"
+                    )
                     continue
-                
+
                 chrom_str = f"chr{chrom}" if not chrom.startswith("chr") else chrom
                 ranges.append((chrom_str, start, end, name))
 
         if not ranges:
-            logging.error(f"No valid ranges extracted from BED file after all attempts: {bed_file_path}")
+            logging.error(
+                f"No valid ranges extracted from BED file after all attempts: {bed_file_path}"
+            )
             raise ValueError(f"No valid ranges in BED file: {bed_file_path}")
         else:
-            logging.info(f"Extracted {len(ranges)} ranges from {bed_file_path} using manual parsing.")
+            logging.info(
+                f"Extracted {len(ranges)} ranges from {bed_file_path} using manual parsing."
+            )
     except Exception as e:
         logging.error(f"Error manually reading BED file {bed_file_path}: {e}")
         raise IOError(f"Error reading BED file {bed_file_path}: {e}") from e
@@ -652,7 +733,7 @@ def read_ranges_from_bed(bed_file_path):
 def expand_range(chrom, start, end, upstream, downstream, chrom_len=None):
     """
     Expands a genomic range by upstream and downstream amounts.
-    
+
     Args:
         chrom (str): Chromosome name
         start (int): Original start coordinate (0-based)
@@ -660,20 +741,20 @@ def expand_range(chrom, start, end, upstream, downstream, chrom_len=None):
         upstream (int): Number of bases to extend upstream (toward smaller coordinates)
         downstream (int): Number of bases to extend downstream (toward larger coordinates)
         chrom_len (int, optional): Length of chromosome for bounds checking
-        
+
     Returns:
         tuple: (expanded_start, expanded_end) with bounds checking applied
     """
     # Apply expansion
     expanded_start = start - upstream  # Subtract from start (upstream = toward smaller coordinates)
-    expanded_end = end + downstream    # Add to end (downstream = toward larger coordinates)
-    
+    expanded_end = end + downstream  # Add to end (downstream = toward larger coordinates)
+
     # Apply bounds checking
     expanded_start = max(0, expanded_start)  # Ensure start is not negative
-    
+
     if chrom_len is not None:
         expanded_end = min(chrom_len, expanded_end)  # Ensure end doesn't exceed chromosome length
-    
+
     # Ensure start < end after expansion
     if expanded_start >= expanded_end:
         logging.debug(
@@ -682,7 +763,7 @@ def expand_range(chrom, start, end, upstream, downstream, chrom_len=None):
             f"expanded to {expanded_start}-{expanded_end}. Using original range."
         )
         return start, end
-    
+
     return expanded_start, expanded_end
 
 
@@ -692,11 +773,13 @@ def calculate_bb_stats(bb_file, chrom, start, end, summary_type="coverage"):
     (This function is for numerical stats, not name extraction)
     """
     if start >= end:
-        logging.debug(f"Invalid range for BigBed stats: start ({start}) >= end ({end}). Chrom: {chrom}. Returning 0.0")
-        return 0.0 # Or np.nan depending on desired behavior for invalid ranges
+        logging.debug(
+            f"Invalid range for BigBed stats: start ({start}) >= end ({end}). Chrom: {chrom}. Returning 0.0"
+        )
+        return 0.0  # Or np.nan depending on desired behavior for invalid ranges
     if chrom not in bb_file.chroms():
         logging.debug(f"Chromosome '{chrom}' not found in BigBed file for stats. Returning 0.0")
-        return 0.0 # Or np.nan
+        return 0.0  # Or np.nan
 
     chrom_len = bb_file.chroms(chrom)
     # Clip query region to chromosome bounds
@@ -704,26 +787,31 @@ def calculate_bb_stats(bb_file, chrom, start, end, summary_type="coverage"):
     query_end = min(chrom_len, end)
 
     if query_start >= query_end:
-        logging.debug(f"Query region [{query_start}-{query_end}) is empty or outside chromosome bounds for BigBed stats. Chrom: {chrom}. Returning 0.0")
+        logging.debug(
+            f"Query region [{query_start}-{query_end}) is empty or outside chromosome bounds for BigBed stats. Chrom: {chrom}. Returning 0.0"
+        )
         return 0.0
 
-    region_len = query_end - query_start # Length of the actual queried region on chromosome
-    
+    region_len = query_end - query_start  # Length of the actual queried region on chromosome
+
     try:
         entries = bb_file.entries(chrom, query_start, query_end)
-    except RuntimeError as e: # pyBigWig can raise RuntimeError if chrom not found, though chroms() check should prevent
-        logging.warning(f"RuntimeError fetching entries for {chrom}:{query_start}-{query_end} in BigBed: {e}. Returning 0.0")
+    except (
+        RuntimeError
+    ) as e:  # pyBigWig can raise RuntimeError if chrom not found, though chroms() check should prevent
+        logging.warning(
+            f"RuntimeError fetching entries for {chrom}:{query_start}-{query_end} in BigBed: {e}. Returning 0.0"
+        )
         return 0.0
 
-
-    if entries is None: # No overlapping entries
+    if entries is None:  # No overlapping entries
         return 0.0
 
     # For coverage, mean, min, max based on BED-like entries (presence/absence or simple depth)
     # This implementation assumes simple presence/absence for coverage,
     # and uses a diff array for depth-based stats if entries were to represent depth (not typical for basic BigBed).
     # For simple BigBed (like TF binding sites), coverage is fraction of bases covered by *any* entry.
-    
+
     # Calculate exact coverage by merging intervals
     intervals = []
     for entry_s, entry_e, _ in entries:
@@ -740,9 +828,9 @@ def calculate_bb_stats(bb_file, chrom, start, end, summary_type="coverage"):
     merged_intervals = []
     current_start, current_end = intervals[0]
     for next_start, next_end in intervals[1:]:
-        if next_start < current_end: # Overlap or contiguous
+        if next_start < current_end:  # Overlap or contiguous
             current_end = max(current_end, next_end)
-        else: # Gap
+        else:  # Gap
             merged_intervals.append((current_start, current_end))
             current_start, current_end = next_start, next_end
     merged_intervals.append((current_start, current_end))
@@ -750,14 +838,15 @@ def calculate_bb_stats(bb_file, chrom, start, end, summary_type="coverage"):
     total_covered_bases_exact = sum(m_end - m_start for m_start, m_end in merged_intervals)
 
     if summary_type == "coverage":
-        if region_len == 0: return 0.0
+        if region_len == 0:
+            return 0.0
         return total_covered_bases_exact / region_len
 
     # For other stats (mean, min, max), we need to interpret BigBed entries differently.
     # If BigBed entries have scores that represent value, that's one thing.
     # If it's just presence/absence, 'mean', 'min', 'max' of "depth" (number of overlapping features)
     # The original diff_array approach is for calculating depth profile.
-    
+
     # Re-implementing depth calculation for mean/min/max of overlap counts
     # This diff_array is relative to the query_start
     diff_array = np.zeros(region_len + 1, dtype=np.int32)
@@ -765,20 +854,20 @@ def calculate_bb_stats(bb_file, chrom, start, end, summary_type="coverage"):
         # Clip entry to the query region and make relative to query_start
         rel_s = max(entry_s, query_start) - query_start
         rel_e = min(entry_e, query_end) - query_start
-        if rel_s < rel_e: # Ensure valid interval after clipping and making relative
+        if rel_s < rel_e:  # Ensure valid interval after clipping and making relative
             diff_array[rel_s] += 1
             diff_array[rel_e] -= 1
-            
-    depth = np.cumsum(diff_array[:-1]) # Depth at each base within the query region
 
-    if depth.size == 0: # Should not happen if region_len > 0
+    depth = np.cumsum(diff_array[:-1])  # Depth at each base within the query region
+
+    if depth.size == 0:  # Should not happen if region_len > 0
         return 0.0
-        
+
     # For mean/min/max, consider only bases that are covered by at least one feature
     # or consider all bases in the region (where uncovered is depth 0)?
     # Original code: covered_bases_mask = depth > 0; covered_depths = depth[covered_bases_mask]
     # This means stats are on the depth values of *covered* bases only.
-    
+
     if summary_type == "mean":
         # Mean depth over the *entire query region* (including 0s for uncovered parts)
         # return np.mean(depth)
@@ -792,11 +881,12 @@ def calculate_bb_stats(bb_file, chrom, start, end, summary_type="coverage"):
     elif summary_type == "max":
         # Max depth over the entire region
         return np.max(depth) if depth.size > 0 else 0.0
-    elif summary_type == "sum": # Sum of depths (total base-pairs covered, accounting for overlaps)
+    elif summary_type == "sum":  # Sum of depths (total base-pairs covered, accounting for overlaps)
         return np.sum(depth)
     else:
         logging.error(f"Error: Unknown summary type '{summary_type}' for BigBed numerical stats.")
-        return np.nan # Use NaN for unknown stat type
+        return np.nan  # Use NaN for unknown stat type
+
 
 # --- NEW FUNCTION for extracting names from BigBed entries ---
 def get_bigbed_entry_names(bb_file, chrom, start, end, name_field_index):
@@ -816,16 +906,20 @@ def get_bigbed_entry_names(bb_file, chrom, start, end, name_field_index):
         np.nan: If no overlapping entries with names are found, or if an error occurs.
     """
     if start >= end:
-        logging.debug(f"Invalid range for name extraction: start ({start}) >= end ({end}). Chrom: {chrom}")
+        logging.debug(
+            f"Invalid range for name extraction: start ({start}) >= end ({end}). Chrom: {chrom}"
+        )
         return np.nan
-    
+
     # Chromosome existence check should be done by caller (process_single_range)
     # Clipping to chrom_len also done by caller via query_end
 
     try:
         entries = bb_file.entries(chrom, start, end)
-    except RuntimeError as e: # Should be rare if chrom check is done prior
-        logging.warning(f"RuntimeError fetching entries for name extraction in {chrom}:{start}-{end}: {e}")
+    except RuntimeError as e:  # Should be rare if chrom check is done prior
+        logging.warning(
+            f"RuntimeError fetching entries for name extraction in {chrom}:{start}-{end}: {e}"
+        )
         return np.nan
 
     if entries is None:
@@ -833,12 +927,12 @@ def get_bigbed_entry_names(bb_file, chrom, start, end, name_field_index):
         return np.nan
 
     found_names = set()
-    for _, _, rest_string in entries: # entry_start, entry_end not used here, only overlap matters
+    for _, _, rest_string in entries:  # entry_start, entry_end not used here, only overlap matters
         if rest_string:
-            fields = rest_string.split('\t')
+            fields = rest_string.split("\t")
             if len(fields) > name_field_index:
                 name = fields[name_field_index]
-                if name and name != '.': # Ignore empty or placeholder names
+                if name and name != ".":  # Ignore empty or placeholder names
                     found_names.add(name)
             # else:
             #     logging.debug(f"Entry in {chrom}:{start}-{end} has too few fields for name_field_index {name_field_index}: {rest_string}")
@@ -847,7 +941,7 @@ def get_bigbed_entry_names(bb_file, chrom, start, end, name_field_index):
         logging.debug(f"No valid names extracted from BigBed entries in {chrom}:{start}-{end}.")
         return np.nan
 
-    return ','.join(sorted(list(found_names)))
+    return ",".join(sorted(list(found_names)))
 
 
 def process_single_range(range_tuple, file_configs, file_manager):
@@ -855,17 +949,22 @@ def process_single_range(range_tuple, file_configs, file_manager):
     Worker function executed by threads to process a single genomic range.
     Now supports extracting names from BigBed files and range expansion.
     """
-    chrom, start, end, range_name = range_tuple # Unpack range_name (from input BED)
-    range_results = {"chromosome": chrom, "start": start, "end": end, "name": range_name} # Add input range_name
+    chrom, start, end, range_name = range_tuple  # Unpack range_name (from input BED)
+    range_results = {
+        "chromosome": chrom,
+        "start": start,
+        "end": end,
+        "name": range_name,
+    }  # Add input range_name
     logging.debug(f"Worker processing range: {chrom}:{start}-{end} (Input Name: {range_name})")
 
     for config in file_configs:
         file_path = config["path"]
         stat_type = config["stat"]
-        col_name = config["name"] # This is the output column name
+        col_name = config["name"]  # This is the output column name
         upstream = config.get("upstream", 0)
         downstream = config.get("downstream", 0)
-        value = np.nan # Default to NaN
+        value = np.nan  # Default to NaN
 
         bw = file_manager.get_file_handle(file_path)
         if bw is None:
@@ -884,7 +983,7 @@ def process_single_range(range_tuple, file_configs, file_manager):
                 # value remains np.nan
             else:
                 chrom_len = file_chroms[chrom]
-                
+
                 # Apply range expansion if specified
                 if upstream > 0 or downstream > 0:
                     expanded_start, expanded_end = expand_range(
@@ -896,14 +995,17 @@ def process_single_range(range_tuple, file_configs, file_manager):
                     )
                 else:
                     expanded_start, expanded_end = start, end
-                
+
                 # Effective query region, clipped to chromosome bounds (additional safety check)
                 query_start = max(0, expanded_start)
                 query_end = min(expanded_end, chrom_len)
 
-
-                if query_start >= query_end: # If range is outside chrom or invalid after clipping
-                    expansion_info = f" (expanded from {start}-{end} by upstream={upstream}, downstream={downstream})" if (upstream > 0 or downstream > 0) else ""
+                if query_start >= query_end:  # If range is outside chrom or invalid after clipping
+                    expansion_info = (
+                        f" (expanded from {start}-{end} by upstream={upstream}, downstream={downstream})"
+                        if (upstream > 0 or downstream > 0)
+                        else ""
+                    )
                     logging.debug(
                         f"Effective query range [{query_start}-{query_end}) is invalid for chromosome '{chrom}' (len {chrom_len}) "
                         f"in {file_path} for input range {chrom}:{start}-{end}{expansion_info}. Setting {col_name} to NaN."
@@ -918,7 +1020,7 @@ def process_single_range(range_tuple, file_configs, file_manager):
                                 f"Range: {chrom}:{query_start}-{query_end}. Setting {col_name} to NaN."
                             )
                             # value remains np.nan
-                        else: # Numerical stats for BigWig
+                        else:  # Numerical stats for BigWig
                             # pyBigWig stats() expects start < end. query_start < query_end is guaranteed here.
                             result_val_list = bw.stats(
                                 chrom, query_start, query_end, type=stat_type, nBins=1
@@ -937,18 +1039,22 @@ def process_single_range(range_tuple, file_configs, file_manager):
                     # --- Logic for BigBed files ---
                     elif bw.isBigBed():
                         if stat_type == "extract_names":
-                            name_field_idx = config.get("name_field_index", 3) # Get from config, default 3
-                            value = get_bigbed_entry_names(bw, chrom, query_start, query_end, name_field_idx)
+                            name_field_idx = config.get(
+                                "name_field_index", 3
+                            )  # Get from config, default 3
+                            value = get_bigbed_entry_names(
+                                bw, chrom, query_start, query_end, name_field_idx
+                            )
                             if value is not np.nan:
                                 logging.debug(
-                                     f"BigBed extracted names '{value}' for {chrom}:{query_start}-{query_end} from {file_path}"
-                                 )
+                                    f"BigBed extracted names '{value}' for {chrom}:{query_start}-{query_end} from {file_path}"
+                                )
                             # else, value is np.nan, message logged by get_bigbed_entry_names
-                        else: # Numerical stats for BigBed
-                            value = calculate_bb_stats(
-                                bw, chrom, query_start, query_end, stat_type
-                            )
-                            if value is not np.nan and not (isinstance(value, float) and np.isnan(value)): # Check for actual value vs nan
+                        else:  # Numerical stats for BigBed
+                            value = calculate_bb_stats(bw, chrom, query_start, query_end, stat_type)
+                            if value is not np.nan and not (
+                                isinstance(value, float) and np.isnan(value)
+                            ):  # Check for actual value vs nan
                                 logging.debug(
                                     f"BigBed stat '{stat_type}' = {value} for {chrom}:{query_start}-{query_end} from {file_path}"
                                 )
@@ -958,7 +1064,9 @@ def process_single_range(range_tuple, file_configs, file_manager):
                             f"Unsupported file type for {file_path} (neither BigWig nor BigBed). Setting {col_name} to NaN."
                         )
                         # value remains np.nan
-        except RuntimeError as e: # Catch pyBigWig runtime errors (e.g. file corruption, specific access issues)
+        except (
+            RuntimeError
+        ) as e:  # Catch pyBigWig runtime errors (e.g. file corruption, specific access issues)
             logging.error(
                 f"Runtime error processing file {file_path} for range {chrom}:{start}-{end}: {e}. Setting {col_name} to NaN."
             )
@@ -966,10 +1074,10 @@ def process_single_range(range_tuple, file_configs, file_manager):
         except Exception as e:
             logging.error(
                 f"Unexpected error processing file {file_path} for range {chrom}:{start}-{end}: {e}. Setting {col_name} to NaN.",
-                exc_info=True # Log traceback for unexpected errors
+                exc_info=True,  # Log traceback for unexpected errors
             )
             # value remains np.nan
-        
+
         range_results[col_name] = value
     return range_results
 
@@ -987,13 +1095,13 @@ def process_range_batch(range_batch, file_configs, file_manager):
 
 
 def process_range_batch_with_local_manager(
-    range_batch, 
-    file_configs, 
-    url_timeout=30, 
-    max_retries=3, 
-    verify_ssl=True, 
-    keep_downloaded_files=False, 
-    base_storage_directory=None
+    range_batch,
+    file_configs,
+    url_timeout=30,
+    max_retries=3,
+    verify_ssl=True,
+    keep_downloaded_files=False,
+    base_storage_directory=None,
 ):
     """
     Process a batch of ranges with a local file manager for process-based parallelization.
@@ -1004,9 +1112,9 @@ def process_range_batch_with_local_manager(
         max_retries=max_retries,
         verify_ssl=verify_ssl,
         keep_downloaded_files=keep_downloaded_files,
-        base_storage_directory=base_storage_directory
+        base_storage_directory=base_storage_directory,
     )
-    
+
     try:
         return process_range_batch(range_batch, file_configs, local_file_manager)
     finally:
@@ -1015,13 +1123,13 @@ def process_range_batch_with_local_manager(
 
 
 def process_single_range_with_local_manager(
-    range_tuple, 
-    file_configs, 
-    url_timeout=30, 
-    max_retries=3, 
-    verify_ssl=True, 
-    keep_downloaded_files=False, 
-    base_storage_directory=None
+    range_tuple,
+    file_configs,
+    url_timeout=30,
+    max_retries=3,
+    verify_ssl=True,
+    keep_downloaded_files=False,
+    base_storage_directory=None,
 ):
     """
     Worker function for process-based parallelization.
@@ -1033,9 +1141,9 @@ def process_single_range_with_local_manager(
         max_retries=max_retries,
         verify_ssl=verify_ssl,
         keep_downloaded_files=keep_downloaded_files,
-        base_storage_directory=base_storage_directory
+        base_storage_directory=base_storage_directory,
     )
-    
+
     try:
         return process_single_range(range_tuple, file_configs, local_file_manager)
     finally:
@@ -1056,11 +1164,13 @@ def query_bigwig_files(
     clear_cache_on_startup=False,
     base_storage_directory=None,
     use_processes=True,
-    batch_size=None
+    batch_size=None,
+    show_progress=None,
+    quiet=False,
 ):
     """
     Queries multiple BigWig/BigBed files over specified genomic ranges using parallel processing.
-    
+
     Args:
         use_processes (bool): If True, use ProcessPoolExecutor for better parallelization.
                              If False, use ThreadPoolExecutor (limited by Python's GIL).
@@ -1076,13 +1186,13 @@ def query_bigwig_files(
         logging.warning("Input 'file_configs' list is empty. Returning empty result.")
         return pd.DataFrame() if return_type == "dataframe" else np.array([])
 
-    results_list = [] # Renamed from 'results' to avoid conflict if used as a variable name
+    results_list = []  # Renamed from 'results' to avoid conflict if used as a variable name
     file_manager = BigWigFileManager(
-        url_timeout=url_timeout, 
-        max_retries=max_retries, 
+        url_timeout=url_timeout,
+        max_retries=max_retries,
         verify_ssl=verify_ssl,
         keep_downloaded_files=keep_downloaded_files,
-        base_storage_directory=base_storage_directory
+        base_storage_directory=base_storage_directory,
     )
 
     if clear_cache_on_startup:
@@ -1091,21 +1201,34 @@ def query_bigwig_files(
 
     try:
         if max_workers is None:
-            max_workers = os.cpu_count() or 1 # Ensure at least 1 worker
+            max_workers = os.cpu_count() or 1  # Ensure at least 1 worker
             logging.info(f"Using default max_workers: {max_workers}")
         else:
-            max_workers = max(1, max_workers) # Ensure at least 1 worker
+            max_workers = max(1, max_workers)  # Ensure at least 1 worker
             logging.info(f"Using specified max_workers: {max_workers}")
 
         if preload_files:
-            unique_paths = sorted(list(set(config["path"] for config in file_configs))) # Sorted for consistent logging
+            unique_paths = sorted(
+                list(set(config["path"] for config in file_configs))
+            )  # Sorted for consistent logging
             logging.info(f"Preloading {len(unique_paths)} unique file paths...")
-            file_manager.preload_remote_files(unique_paths)
+            
+            # Create progress manager and bar for file preloading
+            progress_manager = get_progress_manager(show_progress=show_progress, quiet=quiet)
+            preload_progress = progress_manager.create_bar(
+                total=len(unique_paths), 
+                desc="Downloading/caching files"
+            )
+            
+            try:
+                file_manager.preload_remote_files(unique_paths, progress_bar=preload_progress)
+            finally:
+                preload_progress.close()
 
         # Choose executor type based on workload characteristics
         executor_class = ProcessPoolExecutor if use_processes else ThreadPoolExecutor
         executor_name = "ProcessPoolExecutor" if use_processes else "ThreadPoolExecutor"
-        
+
         # Calculate optimal batch size for small ranges
         if batch_size is None:
             # Auto-calculate batch size: aim for at least 2x more batches than workers
@@ -1114,7 +1237,7 @@ def query_bigwig_files(
             optimal_batches = max_workers * 2
             auto_batch_size = max(1, min(50, total_ranges // optimal_batches))
             batch_size = auto_batch_size if total_ranges > max_workers * 10 else 1
-            
+
         # Optimize worker count for I/O vs CPU bound workloads
         if not use_processes and max_workers > os.cpu_count() * 2:
             # For I/O-bound work (threads), we can use more workers than CPU cores
@@ -1123,13 +1246,15 @@ def query_bigwig_files(
             # For CPU-bound work (processes), limit to CPU cores
             original_workers = max_workers
             max_workers = os.cpu_count()
-            logging.info(f"CPU-bound workload: reduced max_workers from {original_workers} to {max_workers}")
-            
+            logging.info(
+                f"CPU-bound workload: reduced max_workers from {original_workers} to {max_workers}"
+            )
+
         logging.info(f"Using {executor_name} with {max_workers} workers, batch_size={batch_size}")
 
         # Create batches if batch_size > 1
         if batch_size > 1:
-            range_batches = [ranges[i:i + batch_size] for i in range(0, len(ranges), batch_size)]
+            range_batches = [ranges[i : i + batch_size] for i in range(0, len(ranges), batch_size)]
             logging.info(f"Created {len(range_batches)} batches from {len(ranges)} ranges")
         else:
             range_batches = [[r] for r in ranges]  # Each range is its own batch
@@ -1146,7 +1271,7 @@ def query_bigwig_files(
                         max_retries=max_retries,
                         verify_ssl=verify_ssl,
                         keep_downloaded_files=keep_downloaded_files,
-                        base_storage_directory=base_storage_directory
+                        base_storage_directory=base_storage_directory,
                     )
                 else:
                     worker_func = partial(
@@ -1156,7 +1281,7 @@ def query_bigwig_files(
                         max_retries=max_retries,
                         verify_ssl=verify_ssl,
                         keep_downloaded_files=keep_downloaded_files,
-                        base_storage_directory=base_storage_directory
+                        base_storage_directory=base_storage_directory,
                     )
             else:
                 # For threads, use the shared file manager
@@ -1172,56 +1297,80 @@ def query_bigwig_files(
                         file_configs=file_configs,
                         file_manager=file_manager,
                     )
-            
+
             # Submit work (either individual ranges or batches)
             if batch_size > 1:
                 futures = [executor.submit(worker_func, batch) for batch in range_batches]
                 logging.info(f"Submitted {len(futures)} batch queries to {max_workers} workers.")
+                progress_desc = f"Processing {len(ranges)} ranges in {len(futures)} batches"
+                progress_total = len(futures)
             else:
-                futures = [executor.submit(worker_func, r[0]) for r in range_batches]  # r[0] since each batch has 1 element
+                futures = [
+                    executor.submit(worker_func, r[0]) for r in range_batches
+                ]  # r[0] since each batch has 1 element
                 logging.info(f"Submitted {len(futures)} range queries to {max_workers} workers.")
+                progress_desc = f"Processing {len(ranges)} ranges"
+                progress_total = len(ranges)
 
-            for i, future in enumerate(as_completed(futures)):
-                try:
-                    result = future.result()
-                    if result:
-                        if batch_size > 1 and isinstance(result, list):
-                            # Result is a list of dictionaries from batch processing
-                            results_list.extend(result)
-                        elif isinstance(result, dict):
-                            # Single result dictionary
-                            results_list.append(result)
-                    if (i + 1) % 100 == 0 or (i + 1) == len(futures): # Log progress
+            # Create progress bar for processing
+            progress_manager = get_progress_manager(show_progress=show_progress, quiet=quiet)
+            process_progress = progress_manager.create_bar(
+                total=progress_total,
+                desc=progress_desc
+            )
+            
+            try:
+                for i, future in enumerate(as_completed(futures)):
+                    try:
+                        result = future.result()
+                        if result:
+                            if batch_size > 1 and isinstance(result, list):
+                                # Result is a list of dictionaries from batch processing
+                                results_list.extend(result)
+                            elif isinstance(result, dict):
+                                # Single result dictionary
+                                results_list.append(result)
+                        
+                        # Update progress bar
                         if batch_size > 1:
-                            estimated_ranges = (i + 1) * batch_size
-                            logging.info(f"Processed ~{estimated_ranges} ranges in {i + 1}/{len(futures)} batches...")
+                            # For batches, we estimate progress based on batch completion
+                            process_progress.update(1)
                         else:
-                            logging.info(f"Processed {i + 1}/{len(futures)} ranges...")
-                except Exception as e:
-                    logging.error(f"Error retrieving result for a range query: {e}", exc_info=True)
+                            process_progress.update(1)
+                            
+                    except Exception as e:
+                        logging.error(f"Error retrieving result for a range query: {e}", exc_info=True)
+                        # Still update progress even on error
+                        process_progress.update(1)
+            finally:
+                process_progress.close()
     finally:
         file_manager.close_all()
 
     if not results_list:
-        logging.warning("No results were generated. Check logs for issues with ranges, files, or configurations.")
+        logging.warning(
+            "No results were generated. Check logs for issues with ranges, files, or configurations."
+        )
         return pd.DataFrame() if return_type == "dataframe" else np.array([])
 
     logging.info(f"Collected {len(results_list)} results. Creating {return_type}.")
-    
+
     # Define column order: standard BED-like columns first, then stat/extraction columns
     # The 'name' column here is from the input BED, identifying the range.
     # Stat columns are derived from file_configs.
     stat_col_names = [config["name"] for config in file_configs]
     # Ensure 'name' (from input BED) is distinct from stat column names if there's a clash
     # Though 'name' in range_results is fixed.
-    column_order = ["chromosome", "start", "end", "name"] + sorted(list(set(stat_col_names))) # Sort stat cols for consistency
+    column_order = ["chromosome", "start", "end", "name"] + sorted(
+        list(set(stat_col_names))
+    )  # Sort stat cols for consistency
 
     df = pd.DataFrame(results_list)
 
     # change column name from 'name' to 'transcript_id'
-    if 'name' in df.columns:
-        df.rename(columns={'name': 'transcript_id'}, inplace=True)
-    
+    if "name" in df.columns:
+        df.rename(columns={"name": "transcript_id"}, inplace=True)
+
     # Reorder columns to ensure standard ones are first, followed by dynamic stat columns
     # Some stat_col_names might be missing if all values were NaN and thus column not created by DataFrame constructor.
     # So, filter column_order to existing columns in df.
@@ -1230,9 +1379,8 @@ def query_bigwig_files(
     for col in df.columns:
         if col not in final_column_order:
             final_column_order.append(col)
-            
-    df = df[final_column_order]
 
+    df = df[final_column_order]
 
     if return_type.lower() == "dataframe":
         return df
@@ -1247,7 +1395,7 @@ def save_results(df, output_path, output_format=None):
     """
     Saves a results DataFrame to a specified file path and format.
     """
-    if not isinstance(df, pd.DataFrame) or df.empty: # Check if df is a DataFrame
+    if not isinstance(df, pd.DataFrame) or df.empty:  # Check if df is a DataFrame
         logging.error("Cannot save empty or invalid (non-DataFrame) results.")
         return False
 
@@ -1259,16 +1407,18 @@ def save_results(df, output_path, output_format=None):
 
         if output_format is None:
             _, ext = os.path.splitext(output_path.lower())
-            if ext in (".csv", ".txt", ".tsv"): # Added tsv
+            if ext in (".csv", ".txt", ".tsv"):  # Added tsv
                 output_format = "csv"
             elif ext in (".parquet", ".pq"):
                 output_format = "parquet"
             else:
-                logging.warning(f"Unable to detect format from extension '{ext}'. Defaulting to CSV.")
+                logging.warning(
+                    f"Unable to detect format from extension '{ext}'. Defaulting to CSV."
+                )
                 output_format = "csv"
 
         if output_format.lower() == "csv":
-            sep = '\t' if output_path.lower().endswith(".tsv") else ','
+            sep = "\t" if output_path.lower().endswith(".tsv") else ","
             df.to_csv(output_path, index=False, sep=sep)
             logging.info(f"Results saved as CSV (separator: '{sep}') to {output_path}")
         elif output_format.lower() == "parquet":
@@ -1276,7 +1426,9 @@ def save_results(df, output_path, output_format=None):
                 df.to_parquet(output_path, index=False)
                 logging.info(f"Results saved as Parquet to {output_path}")
             except ImportError:
-                logging.error("Failed to save as Parquet. 'pyarrow' or 'fastparquet' library is required. Please install it.")
+                logging.error(
+                    "Failed to save as Parquet. 'pyarrow' or 'fastparquet' library is required. Please install it."
+                )
                 return False
         else:
             logging.error(f"Unsupported output format: {output_format}")
@@ -1288,36 +1440,75 @@ def save_results(df, output_path, output_format=None):
 
 
 def process_bigwig_query(
-    bed_file,
-    config_file,
-    output_file=None,
-    threads=None,
-    log_level="INFO",
-    return_type="dataframe",
-    output_format=None,
-    url_timeout=30,
-    max_retries=3,
-    verify_ssl=True,
-    preload_files=True,
-    keep_downloaded_files=False,
-    clear_cache_on_startup=False,
-    base_storage_directory=None,
-    use_processes=True,
-    batch_size=None
-):
+    bed_file: str,
+    config_file: str,
+    output_file: Optional[str] = None,
+    threads: Optional[int] = None,
+    log_level: str = "INFO",
+    return_type: str = "dataframe",
+    output_format: Optional[str] = None,
+    url_timeout: int = 30,
+    max_retries: int = 3,
+    verify_ssl: bool = True,
+    preload_files: bool = True,
+    keep_downloaded_files: bool = False,
+    clear_cache_on_startup: bool = False,
+    base_storage_directory: Optional[str] = None,
+    use_processes: bool = True,
+    batch_size: Optional[int] = None,
+    show_progress: bool = None,
+    quiet: bool = False,
+) -> Union[pd.DataFrame, None]:
     """
-    High-level function to coordinate the BigWig/BigBed query process.
+    Process BigWig/BigBed files to extract statistics for genomic ranges.
+
+    This function coordinates the entire BigWig/BigBed query process, from loading
+    configuration and genomic ranges to querying remote/local files and returning
+    results. It supports caching, multiprocessing, and various output formats.
+
+    Args:
+        bed_file: Path to BED file containing genomic ranges (chrom, start, end, name)
+        config_file: Path to YAML configuration file specifying BigWig/BigBed files and statistics
+        output_file: Optional path to save results. If None, results are only returned
+        threads: Number of worker threads/processes. Defaults to CPU count
+        log_level: Logging level ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
+        return_type: Format of returned data ('dataframe' or 'array')
+        output_format: Output file format (inferred from extension if None)
+        url_timeout: Timeout in seconds for downloading remote files
+        max_retries: Maximum retry attempts for failed downloads
+        verify_ssl: Whether to verify SSL certificates for HTTPS downloads
+        preload_files: Whether to preload remote files before processing
+        keep_downloaded_files: Whether to keep downloaded files in persistent cache
+        clear_cache_on_startup: Whether to clear persistent cache before processing
+        base_storage_directory: Base directory for file caching
+        use_processes: Whether to use multiprocessing (True) or multithreading (False)
+        batch_size: Number of ranges to process per batch
+
+    Returns:
+        pandas.DataFrame or numpy.ndarray containing query results, or None on error
+
+    Example:
+        >>> import pandas as pd
+        >>> from features.bwq import process_bigwig_query
+        >>>
+        >>> # Process BigWig files for genomic ranges
+        >>> results = process_bigwig_query(
+        ...     bed_file="ranges.bed",
+        ...     config_file="tracks.yaml",
+        ...     output_file="results.csv",
+        ...     threads=4
+        ... )
+        >>> print(results.head())
     """
     # Setup logging (idempotent if already set, or sets if called as library)
     # setup_logging(log_level) # This might be called multiple times if main() also calls it.
-                               # Better to ensure it's called once at the top level.
+    # Better to ensure it's called once at the top level.
 
     logging.info(f"Loading configuration from {config_file}")
     file_configs = load_config_from_yaml(config_file)
-    if not file_configs: # If config loading results in no valid tasks
+    if not file_configs:  # If config loading results in no valid tasks
         logging.error("No valid configurations loaded. Aborting.")
         return pd.DataFrame() if return_type == "dataframe" else np.array([])
-
 
     logging.info(f"Reading genomic ranges from {bed_file}")
     ranges = read_ranges_from_bed(bed_file)
@@ -1326,11 +1517,11 @@ def process_bigwig_query(
         return pd.DataFrame() if return_type == "dataframe" else np.array([])
 
     logging.info(f"Processing queries with {threads or os.cpu_count() or 1} workers")
-    results_df = query_bigwig_files( # Ensure results are DataFrame for saving
+    results_df = query_bigwig_files(  # Ensure results are DataFrame for saving
         ranges,
         file_configs,
         max_workers=threads,
-        return_type="dataframe", # Always get DataFrame for potential saving
+        return_type="dataframe",  # Always get DataFrame for potential saving
         url_timeout=url_timeout,
         max_retries=max_retries,
         verify_ssl=verify_ssl,
@@ -1339,14 +1530,17 @@ def process_bigwig_query(
         clear_cache_on_startup=clear_cache_on_startup,
         base_storage_directory=base_storage_directory,
         use_processes=use_processes,
-        batch_size=batch_size
+        batch_size=batch_size,
+        show_progress=show_progress,
+        quiet=quiet,
     )
 
     if output_file and not results_df.empty:
         save_results(results_df, output_file, output_format)
     elif output_file and results_df.empty:
-        logging.warning(f"Results DataFrame is empty. Output file {output_file} will not be created.")
-
+        logging.warning(
+            f"Results DataFrame is empty. Output file {output_file} will not be created."
+        )
 
     # Return in the originally requested format if different from DataFrame
     if return_type.lower() == "array":
@@ -1354,35 +1548,162 @@ def process_bigwig_query(
     return results_df
 
 
-def main():
-    """Main function to handle command-line arguments and execute the BigWig query process."""
+def query_bigwig_ranges(
+    bed_file: str, config_file: str, output_file: Optional[str] = None, 
+    show_progress: bool = True, **kwargs
+) -> pd.DataFrame:
+    """
+    Simple API entry point for querying BigWig/BigBed files.
+
+    This is a simplified interface to process_bigwig_query with sensible defaults
+    for programmatic usage. All additional parameters can be passed via kwargs.
+
+    Args:
+        bed_file: Path to BED file containing genomic ranges
+        config_file: Path to YAML configuration file
+        output_file: Optional output file path
+        **kwargs: Additional parameters passed to process_bigwig_query
+
+    Returns:
+        pandas.DataFrame: Query results
+
+    Raises:
+        FileNotFoundError: If input files don't exist
+        ValueError: If configuration is invalid
+        RuntimeError: If processing fails
+
+    Example:
+        >>> from features.bwq import query_bigwig_ranges
+        >>>
+        >>> # Basic usage
+        >>> df = query_bigwig_ranges("genes.bed", "tracks.yaml")
+        >>>
+        >>> # With custom parameters
+        >>> df = query_bigwig_ranges(
+        ...     "genes.bed",
+        ...     "tracks.yaml",
+        ...     threads=8,
+        ...     keep_downloaded_files=True
+        ... )
+    """
+    # Set logging to INFO level if not specified
+    kwargs.setdefault("log_level", "INFO")
+
+    try:
+        setup_logging(kwargs.get("log_level", "INFO"))
+        result = process_bigwig_query(
+            bed_file=bed_file, config_file=config_file, output_file=output_file, 
+            show_progress=show_progress, **kwargs
+        )
+
+        if result is None:
+            raise RuntimeError("Processing failed to return results")
+
+        return result
+
+    except Exception as e:
+        logging.error(f"BigWig query failed: {e}")
+        raise
+
+
+def main() -> int:
+    """
+    Main function to handle command-line arguments and execute the BigWig query process.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure)
+    """
     parser = argparse.ArgumentParser(
         description="Extract statistics and names from BigWig/BigBed files for genomic regions specified in a BED file.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--bed", "-b", required=True, help="Path to BED file (chrom, start, end, [name], ...)")
-    parser.add_argument("--config", "-c", required=True, help="Path or URL to YAML configuration file")
-    parser.add_argument("--output", "-o", required=True, help="Path to output file (e.g., .csv, .tsv, .parquet)")
-    parser.add_argument("--threads", "-t", type=int, default=None, help="Number of parallel workers. Defaults to CPU cores.")
-    parser.add_argument("--log-level", "-l", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], default="INFO", help="Logging level")
-    parser.add_argument("--format", "-f", choices=["csv", "tsv", "parquet"], help="Output format (overrides extension detection)")
-    parser.add_argument("--url-timeout", type=int, default=30, help="Timeout (seconds) for URL connections")
-    parser.add_argument("--url-retries", type=int, default=3, help="Max retries for URL connections")
-    parser.add_argument("--no-verify-ssl", action="store_true", help="Disable SSL certificate verification for HTTPS URLs")
-    parser.add_argument("--disable-preload", action="store_true", help="Disable preloading of remote files")
-    parser.add_argument("--keep-downloads", action="store_true", help="Keep downloaded remote files in a persistent cache")
-    parser.add_argument("--clear-cache", action="store_true", help="Clear persistent cache before starting")
-    parser.add_argument("--base-storage-dir", type=str, default=None, help="Custom base directory for cache/temp files")
-    parser.add_argument("--use-processes", action="store_true", default=True, help="Use ProcessPoolExecutor for better parallelization (default: True)")
-    parser.add_argument("--use-threads", action="store_true", help="Use ThreadPoolExecutor instead of ProcessPoolExecutor (overrides --use-processes)")
-    parser.add_argument("--batch-size", type=int, default=None, help="Number of ranges to process per batch (auto-calculated if not specified)")
-    
+    parser.add_argument(
+        "--bed", "-b", required=True, help="Path to BED file (chrom, start, end, [name], ...)"
+    )
+    parser.add_argument(
+        "--config", "-c", required=True, help="Path or URL to YAML configuration file"
+    )
+    parser.add_argument(
+        "--output", "-o", required=True, help="Path to output file (e.g., .csv, .tsv, .parquet)"
+    )
+    parser.add_argument(
+        "--threads",
+        "-t",
+        type=int,
+        default=None,
+        help="Number of parallel workers. Defaults to CPU cores.",
+    )
+    parser.add_argument(
+        "--log-level",
+        "-l",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="INFO",
+        help="Logging level",
+    )
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["csv", "tsv", "parquet"],
+        help="Output format (overrides extension detection)",
+    )
+    parser.add_argument(
+        "--url-timeout", type=int, default=30, help="Timeout (seconds) for URL connections"
+    )
+    parser.add_argument(
+        "--url-retries", type=int, default=3, help="Max retries for URL connections"
+    )
+    parser.add_argument(
+        "--no-verify-ssl",
+        action="store_true",
+        help="Disable SSL certificate verification for HTTPS URLs",
+    )
+    parser.add_argument(
+        "--disable-preload", action="store_true", help="Disable preloading of remote files"
+    )
+    parser.add_argument(
+        "--keep-downloads",
+        action="store_true",
+        help="Keep downloaded remote files in a persistent cache",
+    )
+    parser.add_argument(
+        "--clear-cache", action="store_true", help="Clear persistent cache before starting"
+    )
+    parser.add_argument(
+        "--base-storage-dir",
+        type=str,
+        default=None,
+        help="Custom base directory for cache/temp files",
+    )
+    parser.add_argument(
+        "--use-processes",
+        action="store_true",
+        default=True,
+        help="Use ProcessPoolExecutor for better parallelization (default: True)",
+    )
+    parser.add_argument(
+        "--use-threads",
+        action="store_true",
+        help="Use ThreadPoolExecutor instead of ProcessPoolExecutor (overrides --use-processes)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Number of ranges to process per batch (auto-calculated if not specified)",
+    )
+
+    # Add progress-related arguments
+    update_cli_args(parser)
+
     args = parser.parse_args()
 
-    setup_logging(args.log_level) # Setup logging once here
+    setup_logging(args.log_level)  # Setup logging once here
 
     # Determine execution mode: processes by default, threads if explicitly requested
     use_processes = args.use_processes and not args.use_threads
+
+    # Resolve progress settings from CLI arguments
+    progress_settings = resolve_progress_settings(args)
 
     try:
         results = process_bigwig_query(
@@ -1390,7 +1711,7 @@ def main():
             config_file=args.config,
             output_file=args.output,
             threads=args.threads,
-            log_level=args.log_level, # Passed but logging already set up
+            log_level=args.log_level,  # Passed but logging already set up
             output_format=args.format,
             url_timeout=args.url_timeout,
             max_retries=args.url_retries,
@@ -1400,7 +1721,8 @@ def main():
             clear_cache_on_startup=args.clear_cache,
             base_storage_directory=args.base_storage_dir,
             use_processes=use_processes,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            **progress_settings,  # Pass progress settings
         )
 
         if isinstance(results, pd.DataFrame) and results.empty:
@@ -1408,11 +1730,13 @@ def main():
             # If output was specified, an empty file might not be written, or an empty one is.
             # process_bigwig_query handles logging for this.
             # Exit with non-zero status if no results and output was expected.
-            if args.output: return 1 
+            if args.output:
+                return 1
         elif isinstance(results, np.ndarray) and results.size == 0:
             logging.warning("Processing finished, but the resulting array is empty.")
-            if args.output: return 1
-        elif results is None: # Should ideally not happen if errors are caught
+            if args.output:
+                return 1
+        elif results is None:  # Should ideally not happen if errors are caught
             logging.error("Processing failed to return results.")
             return 1
 
@@ -1422,10 +1746,10 @@ def main():
     except FileNotFoundError as e:
         logging.error(f"Input file not found: {e}")
         return 1
-    except ValueError as e: # For config errors, etc.
+    except ValueError as e:  # For config errors, etc.
         logging.error(f"Configuration or parameter error: {e}")
         return 1
-    except IOError as e: # For file read/write issues not covered by FileNotFoundError
+    except IOError as e:  # For file read/write issues not covered by FileNotFoundError
         logging.error(f"File reading/writing error: {e}")
         return 1
     except Exception as e:

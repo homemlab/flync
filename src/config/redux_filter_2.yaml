@@ -1,0 +1,163 @@
+# Batch Optimization Configuration File
+# This file defines multiple dataset configurations for batch hyperparameter optimization
+
+# Global defaults (can be overridden in individual configurations)
+global_defaults:
+  optimization_direction: "maximize"
+  n_trials: 50
+  random_state: 99
+  job_timeout: 7200
+  delay_between_jobs: 30
+  project_name: "Flync Feature and Hyperparameter Optimization"
+  debug: true
+  threads: 20
+  top_n: 1
+
+# Storage configuration (optional - can be overridden per config)
+storage:
+  mlflow_uri: "http://localhost:5000"
+  storage_url: "sqlite:///optuna.db"
+
+# Default models and metrics (can be overridden per config)
+default_models: ["ebm"]
+default_metric_combinations:
+  - ["precision", "f1"]
+
+# Dataset configurations - each represents a different dataset with its own parameters
+dataset_configs:
+
+  OPT_redux_filter_2:
+    name: "k-mer redux filter #2 dataset"
+    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Filter #2 applied (see feature_selection.ipynb)"
+    
+    # Dataset paths
+    train_data: "src/data/X_train_redux_filter_2.parquet"
+    test_data: "src/data/X_test_redux_filter_2.parquet"
+    holdout_data: "src/data/X_val_redux_filter_2.parquet"
+    target_column: "y"
+    dataset_suffix: "OPT_redux_filter_2"
+
+    # Experiment configuration
+    experiment_name: "OPT_redux_filter_2"
+
+    # Feature correlation analysis
+    #analyze_correlations: true
+    #correlation_threshold: 0.95
+    # Alternative: drop_features_file: "features_to_drop.txt"
+    
+    # Tags specific to this dataset
+    tags:
+      dataset_imbalance_technique: "none"
+      dataset_kmer_redux: "true"
+      features_cpat: "true"
+      features_regulators_mhe: "none"
+      features_ss: "true"
+      features_filter: "2"
+
+  OPT_redux_filter_2_corr:
+    name: "k-mer redux filter #2 dataset"
+    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Filter #2 applied (see feature_selection.ipynb)"
+    
+    # Dataset paths
+    train_data: "src/data/X_train_redux_filter_2.parquet"
+    test_data: "src/data/X_test_redux_filter_2.parquet"
+    holdout_data: "src/data/X_val_redux_filter_2.parquet"
+    target_column: "y"
+    dataset_suffix: "OPT_redux_filter_2"
+
+    # Experiment configuration
+    experiment_name: "OPT_redux_filter_2"
+
+    # Feature correlation analysis
+    analyze_correlations: true
+    correlation_threshold: 0.95
+    # Alternative: drop_features_file: "features_to_drop.txt"
+    
+    # Tags specific to this dataset
+    tags:
+      dataset_imbalance_technique: "none"
+      dataset_kmer_redux: "true"
+      features_cpat: "true"
+      features_regulators_mhe: "none"
+      features_ss: "true"
+      features_filter: "2"
+
+  OPT_redux_filter_2_no_CPAT:
+    name: "k-mer redux filter #2 dataset + No CPAT features"
+    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Filter #2 applied (see feature_selection.ipynb). Additionally dropped CPAT features."
+    
+    # Dataset paths
+    train_data: "src/data/X_train_redux_filter_2_no_CPAT.parquet"
+    test_data: "src/data/X_test_redux_filter_2_no_CPAT.parquet"
+    holdout_data: "src/data/X_val_redux_filter_2_no_CPAT.parquet"
+    target_column: "y"
+    dataset_suffix: "OPT_redux_filter_2"
+
+    # Experiment configuration
+    experiment_name: "OPT_redux_filter_2"
+
+    # Feature correlation analysis
+    #analyze_correlations: true
+    #correlation_threshold: 0.95
+    # Alternative: drop_features_file: "features_to_drop.txt"
+    
+    # Tags specific to this dataset
+    tags:
+      dataset_imbalance_technique: "none"
+      dataset_kmer_redux: "true"
+      features_cpat: "false"
+      features_regulators_mhe: "none"
+      features_ss: "true"
+      features_filter: "2"
+
+  OPT_redux_filter_2_corr_no_CPAT:
+    name: "k-mer redux filter #2 dataset + No CPAT features"
+    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. Filter #2 applied (see feature_selection.ipynb). Additionally dropped CPAT features."
+    
+    # Dataset paths
+    train_data: "src/data/X_train_redux_filter_2_no_CPAT.parquet"
+    test_data: "src/data/X_test_redux_filter_2_no_CPAT.parquet"
+    holdout_data: "src/data/X_val_redux_filter_2_no_CPAT.parquet"
+    target_column: "y"
+    dataset_suffix: "OPT_redux_filter_2"
+
+    # Experiment configuration
+    experiment_name: "OPT_redux_filter_2"
+
+    # Feature correlation analysis
+    analyze_correlations: true
+    correlation_threshold: 0.95
+    # Alternative: drop_features_file: "features_to_drop.txt"
+    
+    # Tags specific to this dataset
+    tags:
+      dataset_imbalance_technique: "none"
+      dataset_kmer_redux: "true"
+      features_cpat: "false"
+      features_regulators_mhe: "none"
+      features_ss: "true"
+      features_filter: "2"
+
+advanced:
+  # Custom model configurations per dataset
+  # custom_model_configs:
+  #   redux_raw:
+  #     randomforest:
+  #       n_trials: 100
+  #     xgboost:
+  #       n_trials: 150
+  #     lightgbm:
+  #       n_trials: 150
+  #     ebm:
+  #       n_trials: 60
+
+  # Conditional execution rules
+  execution_rules:
+    # Skip EBM if dataset has more than 1000 features
+    skip_ebm_large_datasets: true
+    max_features_for_ebm: 1000
+    
+    # # Auto-adjust trials based on dataset size
+    # auto_adjust_trials: true
+    # min_trials: 50
+    # max_trials: 300

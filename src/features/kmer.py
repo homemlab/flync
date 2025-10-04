@@ -7,15 +7,25 @@ import sys
 import os
 import time
 import logging
+import tempfile
+import uuid
 from multiprocessing import Pool, cpu_count
 # Need vstack for combining sparse matrices
-from scipy.sparse import dok_matrix, save_npz, load_npz, csr_matrix, vstack
+from scipy.sparse import dok_matrix, save_npz, load_npz, vstack
 import numpy as np
 import glob
-import pickle # Not used in the current version, but kept from original
 import hashlib
-import tempfile # For temporary directory
-import shutil # For removing temp directory
+import tempfile  # For temporary directory
+
+# Import progress utilities
+try:
+    from src.utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings, create_progress_bar
+except ImportError:
+    # Try relative import when running as script
+    import sys
+    import os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+    from utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings, create_progress_bar
 
 __all__ = ['calculate_kmer_profiles', 'load_kmer_results'] # Exportable functions
 
@@ -168,7 +178,9 @@ def calculate_kmer_profiles(
     temp_dir=None,
     verbose=True,
     count_dtype=np.uint32,
-    log_level="INFO"
+    log_level="INFO",
+    show_progress=True,
+    quiet=False,
 ):
     """
     Calculates k-mer counts from FASTA files using a binary encoding (A/T->0, G/C->1)
@@ -189,7 +201,8 @@ def calculate_kmer_profiles(
                                   If None, a system-default temporary directory is used.
         verbose (bool): If True, emit progress messages and warnings.
         count_dtype (numpy.dtype): NumPy data type for storing k-mer counts.
-        log_level (str): Logging level to use. Defaults to "INFO".
+    log_level (str): Logging level to use. Defaults to "INFO".
+    show_progress (bool): Whether to emit progress bars / milestone logging (auto-disables on non-TTY).
 
     Returns:
         Depending on `return_type`:
@@ -212,11 +225,13 @@ def calculate_kmer_profiles(
         logger.error(f"Input path not found: {input_path}")
         raise FileNotFoundError(f"Input path not found: {input_path}")
 
+    pm = get_progress_manager(show_progress=show_progress, quiet=not verbose)
     fasta_files = []
     if os.path.isfile(input_path):
         fasta_files.append(input_path)
     elif os.path.isdir(input_path):
-        if verbose: logger.info(f"Scanning directory: {input_path}")
+        if verbose:
+            logger.info(f"Scanning directory: {input_path}")
         for ext in fasta_extensions:
             # Ensure correct pattern matching for case-insensitive extensions
             pattern_lower = os.path.join(input_path, f"*{ext.lower()}")
@@ -227,7 +242,8 @@ def calculate_kmer_profiles(
         if not fasta_files:
             logger.error(f"No files with extensions {fasta_extensions} found in {input_path}")
             raise FileNotFoundError(f"No files with extensions {fasta_extensions} found in {input_path}")
-        if verbose: logger.info(f"Found {len(fasta_files)} FASTA file(s).")
+        if verbose:
+            logger.info(f"Found {len(fasta_files)} FASTA file(s).")
     else:
         logger.error(f"Input path '{input_path}' is not a valid file or directory.")
         raise ValueError(f"Input path '{input_path}' is not a valid file or directory.")
@@ -247,6 +263,12 @@ def calculate_kmer_profiles(
         logger.info(f"Using {num_workers} worker processes. Batch size: {batch_size:,} sequences.")
         logger.info(f"Counting BINARY k-mers (A/T->0, G/C->1) for k={k_min}-{k_max}.")
 
+    # Create progress manager and task for files (if multiple files)
+    pm = get_progress_manager(show_progress=show_progress, quiet=quiet)
+    files_progress = None
+    if fasta_files and len(fasta_files) > 1:
+        files_progress = pm.create_bar(total=len(fasta_files), desc="Scanning FASTA files")
+
     # --- 2. Generate All Possible Binary K-mers (Done once) ---
     # For binary approach, the alphabet is '01'
     all_possible_kmers = _generate_all_kmers(k_min, k_max, alphabet='01', verbose=verbose)
@@ -257,18 +279,28 @@ def calculate_kmer_profiles(
 
 
     # --- 3. Setup Temporary Directory for Batches ---
-    # Using a context manager for robust cleanup of the temporary directory
-    with tempfile.TemporaryDirectory(prefix="kmer_binary_batches_", dir=temp_dir) as batch_temp_dir:
-        if verbose: print(f"Using temporary directory for batches: {batch_temp_dir}")
-
+    # Create a persistent temporary directory to avoid cleanup races
+    import uuid
+    batch_temp_dir = os.path.join(temp_dir or tempfile.gettempdir(), f"kmer_binary_batches_{uuid.uuid4().hex[:8]}")
+    os.makedirs(batch_temp_dir, exist_ok=True)
+    
+    if verbose:
+        print(f"Using temporary directory for batches: {batch_temp_dir}")
+    
+    try:
         # --- 4. Process Sequences in Batches ---
         master_sequence_ids_ordered = []  # To store all sequence IDs in the order they are processed
         partial_matrix_files = []       # To store paths to saved .npz files for each batch
         batch_num = 0
         total_sequences_processed = 0
         global_processed_ids_check = set() # To track unique IDs across all batches
+        
+        # Create progress bar for sequence processing
+        sequences_progress = pm.create_bar(total=None, desc="Processing sequences")
+        combine_progress = None
 
         pool = None # Initialize pool to None
+        final_sparse_matrix_csr = None
         try:
             # Create the multiprocessing pool
             pool = Pool(processes=num_workers)
@@ -277,20 +309,25 @@ def calculate_kmer_profiles(
             def sequence_generator():
                 for file_idx, file_path in enumerate(fasta_files):
                     file_basename = os.path.basename(file_path)
-                    if verbose: print(f"Reading from file {file_idx+1}/{len(fasta_files)}: {file_basename}")
+                    if verbose:
+                        print(f"Reading from file {file_idx+1}/{len(fasta_files)}: {file_basename}")
                     try:
                         with open(file_path, "r") as handle:
                             for record in SeqIO.parse(handle, "fasta"):
-                                yield record, file_basename # Yield the record and its source filename
+                                yield record, file_basename  # Yield the record and its source filename
                     except Exception as e:
                         print(f"Warning: Error reading records from {file_path}. Skipping this file. Error: {e}", file=sys.stderr)
+                    finally:
+                        if files_progress is not None:
+                            files_progress.update(1)
 
             seq_gen = sequence_generator()
             eof = False # End of file/generator flag
 
             while not eof:
                 batch_num += 1
-                if verbose: print(f"\nProcessing Batch {batch_num}...")
+                if verbose:
+                    print(f"\nProcessing Batch {batch_num}...")
                 start_time_batch = time.time()
 
                 # Read sequences for the current batch
@@ -320,6 +357,9 @@ def calculate_kmer_profiles(
                             print(f"Warning: Sequence '{original_seq_id}' in file '{file_basename}' is empty. Skipping.", file=sys.stderr)
 
                     except StopIteration:
+                        if files_progress is not None:
+                            files_progress.close()
+                            files_progress = None
                         eof = True # Reached the end of the sequence generator
                         break    # Exit the inner loop for collecting batch sequences
                     except Exception as e:
@@ -327,11 +367,14 @@ def calculate_kmer_profiles(
                         print(f"Warning: Error processing a record: {e}. Skipping this record.", file=sys.stderr)
 
                 if not current_batch_dna_sequences: # If the batch is empty (and not due to eof)
-                    if verbose and not eof: print("Batch is empty, but not at end of input. This might indicate an issue.")
+                    if verbose and not eof:
+                        print("Batch is empty, but not at end of input. This might indicate an issue.")
                     break # Exit the outer while loop if no sequences were collected
 
                 total_sequences_processed += len(current_batch_dna_sequences)
-                if verbose: print(f"  Read {len(current_batch_dna_sequences)} DNA sequences for batch {batch_num}.")
+                sequences_progress.update(len(current_batch_dna_sequences))
+                if verbose:
+                    print(f"  Read {len(current_batch_dna_sequences)} DNA sequences for batch {batch_num}.")
 
                 # Prepare tasks for parallel processing: Convert DNA to binary first
                 batch_tasks = []
@@ -343,15 +386,18 @@ def calculate_kmer_profiles(
                     batch_tasks.append((seq_id, binary_seq_str, k_min, k_max, '01'))
 
                 if not batch_tasks:
-                     if verbose: print(f"  No valid tasks for batch {batch_num} after binary conversion. Skipping matrix creation for this batch.")
-                     del current_batch_dna_sequences # Clean up
-                     continue # Skip to next batch
+                    if verbose:
+                        print(f"  No valid tasks for batch {batch_num} after binary conversion. Skipping matrix creation for this batch.")
+                    del current_batch_dna_sequences  # Clean up
+                    continue  # Skip to next batch
 
-                if verbose: print(f"  Starting binary k-mer counting for {len(batch_tasks)} sequences in batch {batch_num}...")
+                if verbose:
+                    print(f"  Starting binary k-mer counting for {len(batch_tasks)} sequences in batch {batch_num}...")
                 batch_results = pool.map(_count_kmers_worker, batch_tasks) # List of (seq_id, Counter)
 
                 # Build a sparse matrix for the current batch's results
-                if verbose: print(f"  Building sparse matrix for batch {batch_num}...")
+                if verbose:
+                    print(f"  Building sparse matrix for batch {batch_num}...")
                 # DOK is efficient for incremental construction
                 batch_matrix = dok_matrix((len(current_batch_ids_ordered), num_total_kmers), dtype=count_dtype)
                 # Map sequence IDs of this batch to their row index in batch_matrix
@@ -360,7 +406,8 @@ def calculate_kmer_profiles(
                 for seq_id, kmer_counts_for_seq in batch_results:
                     row_idx = batch_id_to_row_idx.get(seq_id)
                     if row_idx is None: # Should not happen if logic is correct
-                        if verbose: print(f"Warning: Sequence ID '{seq_id}' from worker results not found in batch ID list. Skipping.", file=sys.stderr)
+                        if verbose:
+                            print(f"Warning: Sequence ID '{seq_id}' from worker results not found in batch ID list. Skipping.", file=sys.stderr)
                         continue
                     for kmer, count in kmer_counts_for_seq.items():
                         col_idx = kmer_to_col_idx.get(kmer)
@@ -372,17 +419,44 @@ def calculate_kmer_profiles(
 
                 # Save the partial matrix of this batch to a temporary file
                 batch_file_path = os.path.join(batch_temp_dir, f"batch_{batch_num:06d}.npz") # Padded for sorting
-                if verbose: print(f"  Saving batch matrix (shape {batch_matrix_csr.shape}) to: {batch_file_path}")
-                try:
-                    save_npz(batch_file_path, batch_matrix_csr)
-                    partial_matrix_files.append(batch_file_path)
-                except Exception as e:
-                    # If saving a batch fails, it's a critical error as we can't combine later
-                    raise RuntimeError(f"Error saving batch matrix {batch_file_path}: {e}")
+                if verbose:
+                    print(f"  Saving batch matrix (shape {batch_matrix_csr.shape}) to: {batch_file_path}")
+                
+                # Robust file saving with directory creation and atomic writes
+                success = False
+                for attempt in range(3):  # Try up to 3 times
+                    try:
+                        # Ensure the batch directory exists before each save attempt
+                        os.makedirs(batch_temp_dir, exist_ok=True)
+                        
+                        # Use atomic write: write to temporary file then rename
+                        # Note: save_npz automatically adds .npz extension, so we use a temp name without .npz
+                        temp_base = batch_file_path.replace('.npz', '.tmp')
+                        temp_file_path = temp_base + '.npz'  # This will be created by save_npz
+                        
+                        # save_npz automatically adds .npz, so we pass the base name
+                        save_npz(temp_base, batch_matrix_csr)
+                        
+                        # Atomic move from temp to final location
+                        os.replace(temp_file_path, batch_file_path)
+                        
+                        partial_matrix_files.append(batch_file_path)
+                        success = True
+                        break
+                        
+                    except Exception as e:
+                        if attempt == 2:  # Last attempt
+                            # If saving a batch fails after retries, it's a critical error as we can't combine later
+                            raise RuntimeError(f"Error saving batch matrix {batch_file_path} after {attempt + 1} attempts: {e}")
+                        else:
+                            if verbose:
+                                print(f"  Attempt {attempt + 1} failed, retrying: {e}")
+                            time.sleep(0.1 * (attempt + 1))  # Small backoff
 
                 # Explicitly delete large objects to free memory for the next batch
                 del batch_results, batch_matrix, batch_matrix_csr, current_batch_dna_sequences, batch_tasks
-                if verbose: print(f"  Batch {batch_num} completed in {time.time() - start_time_batch:.2f}s.")
+                if verbose:
+                    print(f"  Batch {batch_num} completed in {time.time() - start_time_batch:.2f}s.")
 
             # --- 5. Combine Batch Results ---
             if not partial_matrix_files:
@@ -391,11 +465,18 @@ def calculate_kmer_profiles(
                 else: # This case should ideally not be reached if batches were processed
                     raise RuntimeError("Processing seemed to complete, but no partial matrix files were generated.")
 
-            if verbose: print(f"\nCombining {len(partial_matrix_files)} batch matrices...")
+            if verbose:
+                print(f"\nCombining {len(partial_matrix_files)} batch matrices...")
             start_time_combine = time.time()
+            
+            # Create progress bar for combining batches
+            combine_progress = pm.create_bar(total=len(partial_matrix_files), desc="Loading batch matrices")
             try:
                 # Load all saved batch matrices
-                matrices_to_stack = [load_npz(f) for f in sorted(partial_matrix_files)] # Sort to ensure order
+                matrices_to_stack = []
+                for f in sorted(partial_matrix_files):  # Sort to ensure order
+                    matrices_to_stack.append(load_npz(f))
+                    combine_progress.update(1)
 
                 # Validate that all matrices have the correct number of columns (k-mers)
                 if not matrices_to_stack: # Should be caught by `if not partial_matrix_files`
@@ -404,6 +485,7 @@ def calculate_kmer_profiles(
                     mismatched_shapes = [(f, m.shape[1]) for f, m in zip(sorted(partial_matrix_files), matrices_to_stack) if m.shape[1] != num_total_kmers]
                     raise ValueError(f"Inconsistent number of columns in saved batch matrices. Expected {num_total_kmers}. Mismatches: {mismatched_shapes}")
 
+                combine_progress.set_description("Stacking matrices")
                 # Vertically stack the matrices
                 final_sparse_matrix_csr = vstack(matrices_to_stack, format='csr')
             except MemoryError:
@@ -424,25 +506,61 @@ def calculate_kmer_profiles(
                 elif final_sparse_matrix_csr.shape[0] != total_sequences_processed:
                      print(f"Warning: Final matrix row count ({final_sparse_matrix_csr.shape[0]}) "
                           f"differs from total sequences processed ({total_sequences_processed}). Check logs.", file=sys.stderr)
+        
+        except Exception as e:
+            # Handle any errors in the inner processing block
+            raise e
 
-
-        finally:
+    finally:
             # Ensure the multiprocessing pool is properly closed and joined
             if pool:
                 pool.close()
                 pool.join()
-            # The temporary directory `batch_temp_dir` is cleaned up automatically by the context manager
+                pool = None  # Mark as cleaned up
+            
+            # Clean up progress bars
+            try:
+                if sequences_progress:
+                    sequences_progress.close()
+            except:
+                pass
+            try:
+                if combine_progress:
+                    combine_progress.close()
+            except:
+                pass
+            try:
+                if files_progress:
+                    files_progress.close()
+            except:
+                pass
+            
+            # Clean up the temporary directory
+            try:
+                import shutil
+                if os.path.exists(batch_temp_dir):
+                    shutil.rmtree(batch_temp_dir)
+                    if verbose:
+                        print(f"Cleaned up temporary directory: {batch_temp_dir}")
+            except Exception as cleanup_error:
+                if verbose:
+                    print(f"Warning: Failed to clean up temporary directory {batch_temp_dir}: {cleanup_error}")
 
     # --- 6. Handle Return Type ---
     # `master_sequence_ids_ordered` contains the IDs for the rows of the final matrix
     # `all_possible_kmers` contains the names for the columns
     sequence_ids_ordered = master_sequence_ids_ordered
 
+    if final_sparse_matrix_csr is None:
+        raise RuntimeError("Final sparse matrix was not generated.")
+
     if return_type == 'sparse_matrix':
-        if verbose: print("Returning final sparse matrix object and corresponding ID/k-mer mappings.")
+        if verbose:
+            print("Returning final sparse matrix object and corresponding ID/k-mer mappings.")
         return final_sparse_matrix_csr, sequence_ids_ordered, all_possible_kmers
     elif return_type == 'sparse_df':
-        if verbose: print("Creating sparse Pandas DataFrame from the final matrix...")
+        if verbose:
+            print("Creating sparse Pandas DataFrame from the final matrix...")
         try:
             df = pd.DataFrame.sparse.from_spmatrix(
                 final_sparse_matrix_csr,
@@ -453,7 +571,8 @@ def calculate_kmer_profiles(
         except Exception as e:
             raise RuntimeError(f"Failed to create sparse Pandas DataFrame: {e}")
     elif return_type == 'dense_df':
-        if verbose: print("Attempting to create dense Pandas DataFrame (WARNING: this can be memory-intensive)...")
+        if verbose:
+            print("Attempting to create dense Pandas DataFrame (WARNING: this can be memory-intensive)...")
         # Heuristic: Warn if the dense matrix would be very large
         num_elements = final_sparse_matrix_csr.shape[0] * final_sparse_matrix_csr.shape[1]
         if num_elements > 10**8: # Arbitrary threshold for large matrix
@@ -561,7 +680,9 @@ def process_kmer_calculation(args):
     Raises:
         See exceptions from calculate_kmer_profiles().
     """
-    verbose = not args.quiet
+    # Resolve progress settings
+    progress_settings = resolve_progress_settings(args)
+    verbose = not progress_settings.get('quiet', False)
     logger = setup_logging(args.log_level if hasattr(args, "log_level") else "INFO")
 
     # Process FASTA extensions from comma-separated string to a tuple
@@ -577,7 +698,8 @@ def process_kmer_calculation(args):
     if verbose:
         logger.info("--- Binary K-mer Counting Script ---")
         logger.info(f"Input: {args.input}")
-        if args.output: logger.info(f"Output Base: {args.output}, Format: {args.output_format}")
+        if args.output:
+            logger.info(f"Output Base: {args.output}, Format: {args.output_format}")
         logger.info(f"K-mer range: {args.min_k}-{args.max_k}")
         logger.info(f"Workers: {args.workers if args.workers else cpu_count()}, Batch Size: {args.batch_size:,}")
         logger.info(f"FASTA Extensions: {fasta_extensions}")
@@ -604,7 +726,8 @@ def process_kmer_calculation(args):
             temp_dir=args.temp_dir,
             verbose=verbose,
             count_dtype=selected_dtype,
-            log_level=args.log_level if hasattr(args, "log_level") else "INFO"
+            log_level=args.log_level if hasattr(args, "log_level") else "INFO",
+            **progress_settings,  # Pass unified progress settings
         )
 
         # --- Handle Results and Saving (if --output is specified) ---
@@ -614,7 +737,8 @@ def process_kmer_calculation(args):
             output_dir = os.path.dirname(output_base)
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
-                if verbose: logger.info(f"Created output directory: {output_dir}")
+                if verbose:
+                    logger.info(f"Created output directory: {output_dir}")
 
             save_successful = True # Flag to track if saving was successful
 
@@ -659,10 +783,12 @@ def process_kmer_calculation(args):
                     if calc_return_type == 'dense_df' and isinstance(results, pd.DataFrame):
                         df_dense = results
                         csv_file = f"{output_base_tagged}_dense.csv"
-                        if verbose: logger.info(f"Saving dense binary k-mer DataFrame to CSV: {csv_file}")
+                        if verbose:
+                            logger.info(f"Saving dense binary k-mer DataFrame to CSV: {csv_file}")
                         try:
                             df_dense.to_csv(csv_file, index=True)
-                            if verbose: logger.info(f"Dense CSV saved successfully to {csv_file}.")
+                            if verbose:
+                                logger.info(f"Dense CSV saved successfully to {csv_file}.")
                         except Exception as e:
                             logger.error(f"Error saving dense CSV: {e}")
                             save_successful = False
@@ -675,10 +801,12 @@ def process_kmer_calculation(args):
                     if calc_return_type == 'dense_df' and isinstance(results, pd.DataFrame):
                         df_dense = results
                         parquet_file = f"{output_base_tagged}_dense.parquet"
-                        if verbose: logger.info(f"Saving dense binary k-mer DataFrame to Parquet: {parquet_file}")
+                        if verbose:
+                            logger.info(f"Saving dense binary k-mer DataFrame to Parquet: {parquet_file}")
                         try:
                             df_dense.to_parquet(parquet_file, index=True, engine='pyarrow', compression='zstd')
-                            if verbose: logger.info(f"Dense Parquet saved successfully to {parquet_file}.")
+                            if verbose:
+                                logger.info(f"Dense Parquet saved successfully to {parquet_file}.")
                         except ImportError:
                             logger.error("The 'pyarrow' library is required to save in Parquet format. "
                                   "Please install it (e.g., 'pip install pyarrow').")
@@ -693,11 +821,13 @@ def process_kmer_calculation(args):
             elif results is None and not save_successful: # Already handled above, just pass
                 pass
             elif results is None: # General case if results is None and not caught above
-                 if verbose: logger.error("No results were generated to save.")
+                 if verbose:
+                     logger.error("No results were generated to save.")
                  save_successful = False
 
             if not save_successful:
-                if verbose: logger.error("One or more output saving steps failed.")
+                if verbose:
+                    logger.error("One or more output saving steps failed.")
                 return 1 # Exit with error if any saving operation failed
             
             # Success case for saving
@@ -722,7 +852,8 @@ def process_kmer_calculation(args):
         traceback.print_exc() # Print full traceback for unexpected errors
         return 1
 
-    if verbose: logger.info("Script finished successfully.")
+    if verbose:
+        logger.info("Script finished successfully.")
     return 0 # Default success return code
 
 
@@ -800,7 +931,11 @@ def parse_arguments():
         default="INFO",
         help="Set the logging level."
     )
-    return parser.parse_args()
+    # Add unified progress arguments (excluding --quiet since it already exists)
+    update_cli_args(parser, add_quiet=False)
+    
+    args = parser.parse_args()
+    return args
 
 def main():
     """Main entry point for the k-mer calculation CLI."""

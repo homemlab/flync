@@ -1,0 +1,40 @@
+[project]
+name = "flync"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = [
+    "biopython>=1.85",
+    "cpat>=3.0.5",
+    "interpret>=0.7.2",
+    "joblib>=1.5.2",
+    "matplotlib>=3.10.6",
+    "numpy>=2.3.2",
+    "pandas>=2.3.2",
+    "plotly>=6.3.0",
+    "pyarrow>=14.0.2",
+    "pybigwig>=0.3.24",
+    "pyensembl>=2.3.13",
+    "pyfaidx>=0.9.0.1",
+    "pyranges>=0.1.4",
+    "pyyaml>=6.0.2",
+    "scikit-learn>=1.7.1",
+    "scipy>=1.16.1",
+    "seaborn>=0.13.2",
+    "tqdm>=4.67.1",
+]
+
+[dependency-groups]
+dev = [
+    "boto3>=1.40.21",
+    "gunicorn>=23.0.0",
+    "imbalanced-learn>=0.14.0",
+    "jupyter>=1.1.1",
+    "lazypredict>=0.2.16",
+    "lightgbm>=4.6.0",
+    "mlflow>=3.3.2",
+    "optuna>=4.5.0",
+    "optuna-dashboard>=0.19.0",
+    "optuna-fast-fanova>=0.0.4",
+    "protobuf>=6.32.0",
+    "xgboost>=3.0.4",
+]

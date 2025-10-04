@@ -72,9 +72,9 @@
   stats:
     - stat: coverage
       name: cov_epdnew
-    - stat: extract_names
-      name: entries_epdnew      # This will be the column header for the protein names
-      name_field_index: 0 
+    # - stat: extract_names
+    #   name: entries_epdnew      # This will be the column header for the protein names
+    #   name_field_index: 0 
     
 - path: https://hgdownload.soe.ucsc.edu/goldenPath/dm6/phastCons27way/dm6.27way.phastCons.bw
   stats:

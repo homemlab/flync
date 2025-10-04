@@ -6,7 +6,7 @@ global_defaults:
   optimization_direction: "maximize"
   n_trials: 50
   random_state: 99
-  job_timeout: 3600
+  job_timeout: 7200
   delay_between_jobs: 30
   project_name: "Flync Feature and Hyperparameter Optimization"
   debug: true
@@ -35,10 +35,10 @@ dataset_configs:
     test_data: "src/data/X_test_full.parquet"
     holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "full_raw"
+    dataset_suffix: "NEW_full_raw"
     
     # Experiment configuration
-    experiment_name: "full_raw"
+    experiment_name: "NEW_full_raw"
     
     # Feature correlation analysis
     #analyze_correlations: true
@@ -66,10 +66,10 @@ dataset_configs:
     test_data: "src/data/X_test_full.parquet"
     holdout_data: "src/data/X_val_full.parquet"
     target_column: "y"
-    dataset_suffix: "full_raw"
+    dataset_suffix: "NEW_full_raw"
     
     # Experiment configuration
-    experiment_name: "full_raw"
+    experiment_name: "NEW_full_raw"
     
     # Feature correlation analysis
     analyze_correlations: true
@@ -219,7 +219,7 @@ advanced:
     skip_ebm_large_datasets: true
     max_features_for_ebm: 1500
     
-    # Auto-adjust trials based on dataset size
-    auto_adjust_trials: true
-    min_trials: 50
-    max_trials: 300
+    # # Auto-adjust trials based on dataset size
+    # auto_adjust_trials: true
+    # min_trials: 50
+    # max_trials: 300
