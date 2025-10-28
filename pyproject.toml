@@ -20,6 +20,7 @@ dependencies = [
     "numba>=0.61.0",
     "shap>=0.48.0",
     "tqdm>=4.66.0",
+    "gffutils>=0.13",
 ]
 
 [dependency-groups]
@@ -31,13 +32,16 @@ dev = [
     "jupyter>=1.1.1",
     "lazypredict>=0.2.16",
     "lightgbm>=4.6.0",
-    "marimo>=0.16.3",
+    "marimo>=0.17.0",
+    "matplotlib-venn>=1.1.2",
     "mlflow>=3.3.2",
     "openpyxl>=3.1.5",
     "optuna>=4.5.0",
     "optuna-dashboard>=0.19.0",
     "optuna-fast-fanova>=0.0.4",
     "protobuf>=6.32.0",
+    "pybedtools>=0.12.0",
     "pytest>=8.4.2",
+    "ty>=0.0.1a23",
     "xgboost>=3.0.4",
 ]

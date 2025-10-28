@@ -8,7 +8,6 @@ This module coordinates multiple feature extraction backends used in the
 lncRNA / transcript classification workflow:
 
     * ``bwq``  - BigWig / BigBed quantitative regional summarisation
-    * ``cpat`` - Coding potential & ORF statistics
     * ``mfe``  - Minimum free energy (RNA secondary structure) features
     * ``kmer`` - High-dimensional k-mer frequency profiles (optionally TF-IDF + SVD)
 
@@ -17,14 +16,28 @@ It provides both a Python API (the :class:`FeatureWrapper`) and a CLI
 progress reporting, and persistent caching of remote BigWig resources.
 
 Pipeline Execution Order (``run_all``):
-    1. BigWig Query (regional signal extraction)
-    2. CPAT (ORF and coding probability; may also yield sequences)
-    3. Sequence extraction (fallback if CPAT did not supply sequences)
-    4. RNA MFE / structure prediction
-    5. K-mer profiling (dense or sparse) followed by optional transformations:
+    1. GTF Input Processing (required):
+        a. Auto-generate BED for BWQ from transcript-level features
+        b. Extract properly spliced sequences using gffutils
+    2. BigWig Query (regional signal extraction using BED)
+    3. RNA MFE / structure prediction
+    4. K-mer profiling (dense or sparse) followed by optional transformations:
         a. Dimensionality reduction (Truncated SVD) - either global or per k length
         b. TF-IDF weighting (applied pre- or post-reduction depending on configuration)
-    6. Final keyed merge on ``transcript_id`` (or ``NAME`` if present)
+    5. Final keyed merge on ``transcript_id``
+
+GTF-Based Workflow (Required):
+    The pipeline requires GTF files as the primary input for accurate sequence extraction.
+    GTF-based extraction:
+    * Properly splices multi-exon transcripts (exon concatenation)
+    * Handles strand orientation automatically (reverse complement for minus strand)
+    * Converts DNA to RNA (T → U)
+    * Caches gffutils database for faster reruns
+    
+    When GTF is provided:
+    * BED file is auto-generated for BWQ (transcript-level coordinates only)
+    * Sequences are extracted using gffutils for proper splicing
+    * BED and FASTA can be provided explicitly to override auto-generation
 
 K-mer Transformation Strategy:
     The heavy k-mer space can be processed in two principal modes:
@@ -38,7 +51,8 @@ K-mer Transformation Strategy:
 Caching:
     Remote BigWig / BigBed assets are downloaded into a persistent directory
     (``bwq_tracks/bwq_persistent_cache`` by default) enabling repeatable and
-    faster executions. Cache lifecycle is controlled via CLI flags or the API.
+    faster executions. GTF databases are cached separately in ``gffutils_cache``
+    subdirectory. Cache lifecycle is controlled via CLI flags or the API.
 
 Progress Reporting:
     Multi-phase progress bars can be enabled/disabled; a quiet mode suppresses
@@ -50,29 +64,48 @@ Error Handling Philosophy:
     * Non-critical merge alignment issues log warnings (e.g. missing key columns).
 
 Example (CLI):
+    GTF-based workflow (recommended)::
+
+        python feature_wrapper.py all \
+            --gtf annotations.gtf \
+            --ref-genome genome.fa \
+            --bwq-config config.yaml \
+            --use-dim-redux --redux-n-components 32 --use-tfidf --sparse \
+            -o features.parquet
+
+    Legacy BED-based workflow::
+
+        python feature_wrapper.py all \
+            --bed regions.bed \
+            --ref-genome genome.fa \
+            --bwq-config config.yaml \
+            -o features.parquet
+
     Basic BigWig extraction::
 
         python feature_wrapper.py bwq --bed regions.bed --bwq-config config.yaml -o bwq.parquet
 
-    Full pipeline with grouped SVD per k and TF-IDF::
-
-        python feature_wrapper.py all \
-            --bed regions.bed \
-            --bwq-config config.yaml \
-            --ref-genome genome.fa \
-            --hexamer hexamer.dat \
-            --logit-model logit.RData \
-            --use-dim-redux --redux-n-components 32 --use-tfidf --sparse \
-            -o features.parquet
-
 Example (Python API)::
 
     from features.feature_wrapper import FeatureWrapper
-    fw = FeatureWrapper(cache_dir="./bwq_tracks", keep_downloaded_files=True)
+    fw = FeatureWrapper(cache_dir="./bwq_tracks", keep_downloaded_files=True, threads=8)
+    
+    # GTF-based workflow
     df_all = fw.run_all(
-        bed_file="regions.bed", config_file="config.yaml",
-        ref_genome_path="genome.fa", hexamer_dat_path="hexamer.dat",
-        logit_model_path="logit.RData", k_min=3, k_max=12,
+        gtf_file="annotations.gtf",
+        ref_genome_path="genome.fa",
+        config_file="config.yaml",
+        k_min=3, k_max=12,
+        use_dim_redux=True, redux_n_components=32, use_tfidf=True,
+        sparse=True, group_kmer_redux_by_length=True
+    )
+    
+    # Or BED-based workflow
+    df_all = fw.run_all(
+        bed_file="regions.bed",
+        ref_genome_path="genome.fa",
+        config_file="config.yaml",
+        k_min=3, k_max=12,
         use_dim_redux=True, redux_n_components=32, use_tfidf=True,
         sparse=True, group_kmer_redux_by_length=True
     )
@@ -99,17 +132,27 @@ from scipy import sparse
 
 # Import progress utilities
 try:
-    from src.utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings
+    from src.utils.progress import (
+        get_progress_manager,
+        update_cli_args,
+        resolve_progress_settings,
+    )
 except ImportError:
     # Try relative import when running as script
     import sys
     import os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-    from utils.progress import get_progress_manager, update_cli_args, resolve_progress_settings
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from utils.progress import (
+        get_progress_manager,
+        update_cli_args,
+        resolve_progress_settings,
+    )
 
 # Import feature extraction modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from features import bwq, cpat, kmer, mfe
+from features import bwq, kmer, mfe
+
 try:
     from utils.kmer_redux import apply_kmer_transformations
 except ImportError:
@@ -128,18 +171,26 @@ class FeatureWrapper:
     """High-level orchestrator for feature module execution and aggregation.
 
     Responsibilities:
-        * Standardise execution of individual feature providers (bwq, cpat, mfe, kmer).
-        * Provide a coherent logging / progress UX across heterogeneous backends.
-        * Manage on-disk caching of remote signal tracks (BigWig / BigBed).
-        * Apply optional k-mer post-processing (TF-IDF, SVD - grouped or global).
-        * Perform schema harmonisation (column renames) and keyed merges.
+    * Standardise execution of individual feature providers (bwq, mfe, kmer).
+    * Provide a coherent logging / progress UX across heterogeneous backends.
+    * Manage on-disk caching of remote signal tracks (BigWig / BigBed).
+    * Support GTF-based workflow for accurate spliced transcript sequence extraction (required).
+    * Apply optional k-mer post-processing (TF-IDF, SVD - grouped or global).
+    * Perform schema harmonisation (column renames) and keyed merges.
+
+    GTF-Based Features (Required):
+    * Extract properly spliced transcript sequences using gffutils
+    * Auto-generate BED files from GTF for BWQ processing
+    * Cache gffutils databases for fast reruns
+    * GTF input is required for the run_all() pipeline
 
     Attribute Summary:
-        base_cache_dir (str): Root directory for any persisted track resources.
+        base_cache_dir (str): Root directory for any persisted track resources and gffutils databases.
         keep_downloaded_files (bool): If False, remote assets are redownloaded every call.
         clear_cache_on_startup (bool): If True, existing cache is purged at init.
         show_progress (bool): Enables progress bar display.
         quiet (bool): Suppresses most non-error logs and progress indicators.
+        default_threads (int | None): Shared worker budget applied to downstream modules.
 
     Thread / Process Safety:
         The wrapper itself is stateless aside from cache directory configuration;
@@ -155,6 +206,7 @@ class FeatureWrapper:
         clear_cache_on_startup: bool = False,
         show_progress: bool = True,
         quiet: bool = False,
+        threads: Optional[int] = None,
     ):
         """Create a wrapper instance.
 
@@ -172,6 +224,9 @@ class FeatureWrapper:
             Display progress bars (ignored if ``quiet=True``).
         quiet : bool, default False
             Suppress progress bars and most informational logging.
+        threads : int | None, optional
+            Default worker count to reuse across feature modules. When ``None`` each
+            backend falls back to its internal CPU-based heuristic.
         """
         self.set_log_level(log_level)
 
@@ -185,10 +240,14 @@ class FeatureWrapper:
 
         self.keep_downloaded_files = keep_downloaded_files
         self.clear_cache_on_startup = clear_cache_on_startup
-        
+
         # Store progress settings
         self.show_progress = show_progress
         self.quiet = quiet
+
+        if threads is not None and threads < 1:
+            raise ValueError("threads must be a positive integer when provided.")
+        self.default_threads = threads
 
         # Create base cache directory if it doesn't exist
         if self.keep_downloaded_files:
@@ -283,6 +342,7 @@ class FeatureWrapper:
         bigwig_files: Optional[List[str]] = None,
         config_file: Optional[str] = None,
         output_file: Optional[str] = None,
+        threads: Optional[int] = None,
         **kwargs,
     ) -> pd.DataFrame:
         """Execute BigWig / BigBed quantitative feature extraction.
@@ -299,6 +359,9 @@ class FeatureWrapper:
             requested summary statistics. Takes precedence over ``bigwig_files``.
         output_file : str | None
             Optional parquet destination. Not written if omitted.
+        threads : int | None, optional
+            Worker count override for BigWig querying. Falls back to the wrapper
+            default thread value when omitted.
         **kwargs : any
             Forwarded to internal ``bwq.process_bigwig_query`` / ``process_bed_regions``.
 
@@ -336,6 +399,17 @@ class FeatureWrapper:
             raise ValueError("Either bigwig_files or config_file must be provided")
 
         try:
+            threads_override = kwargs.pop("threads", None)
+            effective_threads = (
+                threads
+                if threads is not None
+                else threads_override
+                if threads_override is not None
+                else self.default_threads
+            )
+            if effective_threads is not None and effective_threads < 1:
+                raise ValueError("threads must be a positive integer when provided.")
+
             if config_file:
                 # Use the process_bigwig_query function with config file and caching settings
                 result_df = bwq.process_bigwig_query(
@@ -349,6 +423,7 @@ class FeatureWrapper:
                     clear_cache_on_startup=self.clear_cache_on_startup,
                     show_progress=self.show_progress,
                     quiet=self.quiet,
+                    threads=effective_threads,
                     **kwargs,
                 )
             else:
@@ -380,104 +455,6 @@ class FeatureWrapper:
         except Exception as e:
             logger.error(f"BigWig Query extraction failed: {e}")
             raise RuntimeError(f"BigWig Query extraction failed: {e}") from e
-
-    def run_cpat(
-        self,
-        bed_file: str,
-        ref_genome_path: str,
-        hexamer_dat_path: str,
-        logit_model_path: str,
-        output_file: Optional[str] = None,
-        min_orf_len: int = 75,
-        n_top_orf: int = 5,
-        start_codons: List[str] = ["ATG"],
-        stop_codons: List[str] = ["TAG", "TAA", "TGA"],
-        antisense: bool = False,
-        **kwargs,
-    ) -> pd.DataFrame:
-        """Run CPAT to compute coding potential and ORF statistics.
-
-        Parameters
-        ----------
-        bed_file : str
-            Input transcript coordinate annotations (BED6/12 recommended).
-        ref_genome_path : str
-            Reference genome FASTA path used for sequence retrieval.
-        hexamer_dat_path : str
-            CPAT hexamer frequency table (.dat).
-        logit_model_path : str
-            CPAT logistic regression model (.RData).
-        output_file : str | None
-            Optional parquet target; written only if provided.
-        min_orf_len : int, default 75
-            Minimum ORF nucleotide length.
-        n_top_orf : int, default 5
-            Max ORF candidates per strand retained per transcript.
-        start_codons : list[str]
-            Start codons considered. Defaults to ``['ATG']``.
-        stop_codons : list[str]
-            Stop codons considered. Defaults to ``['TAG','TAA','TGA']``.
-        antisense : bool, default False
-            Whether to also search reverse complement strand.
-        **kwargs : any
-            Additional passthrough parameters to ``cpat.run_cpat_calculation``.
-
-        Returns
-        -------
-        pandas.DataFrame
-            CPAT feature table. Column names are later normalised (``coding_prob`` → ``cpat_cod_prob`` etc.).
-
-        Raises
-        ------
-        FileNotFoundError
-            If required CPAT inputs are absent.
-        RuntimeError
-            On CPAT execution failure.
-        """
-        logger.info("Running CPAT feature extraction...")
-
-        # Validate input files
-        required_files = {
-            "BED": bed_file,
-            "Reference FASTA": ref_genome_path,
-            "Hexamer Table": hexamer_dat_path,
-            "Logit Model": logit_model_path,
-        }
-
-        for name, path in required_files.items():
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"{name} file not found: {path}")
-
-        try:
-            # Run CPAT calculation using functions from cpat module
-            result_df = cpat.run_cpat_calculation(
-                bed_file_path=bed_file,
-                ref_genome_path=ref_genome_path,
-                hexamer_dat_path=hexamer_dat_path,
-                logit_model_path=logit_model_path,
-                output_parquet_path=output_file
-                if output_file
-                else "",  # Empty string if None
-                min_orf_len=min_orf_len,
-                n_top_orf=n_top_orf,
-                start_codons=start_codons,
-                stop_codons=stop_codons,
-                antisense=antisense,
-                show_progress=self.show_progress,
-                quiet=self.quiet,
-                **kwargs,
-            )
-
-            # Save output if requested and not already saved by run_cpat_calculation
-            if output_file and not os.path.exists(output_file):
-                logger.info(f"Saving CPAT results to {output_file}")
-                result_df.to_parquet(output_file)
-
-            return result_df
-
-        except Exception as e:
-            logger.error(f"CPAT extraction failed: {e}")
-            raise RuntimeError(f"CPAT extraction failed: {e}") from e
 
     def run_mfe(
         self,
@@ -526,12 +503,25 @@ class FeatureWrapper:
             )
 
         try:
+            threads_override = kwargs.pop("threads", None)
+            effective_processes = (
+                num_processes
+                if num_processes is not None
+                else threads_override
+                if threads_override is not None
+                else self.default_threads
+            )
+            if effective_processes is not None and effective_processes < 1:
+                raise ValueError(
+                    "num_processes/threads must be a positive integer when provided."
+                )
+
             # Run MFE calculation using functions from mfe module
             result_df = mfe.calculate_all_mfe_and_structure(
                 df_to_process=df_input,
                 sequence_col=sequence_col,
                 include_structure=include_structure,
-                num_processes=num_processes,
+                num_processes=effective_processes,
                 show_progress=self.show_progress,
                 quiet=self.quiet,
                 **kwargs,
@@ -557,6 +547,7 @@ class FeatureWrapper:
         output_file: Optional[str] = None,
         return_sparse_paths: bool = False,
         sparse_base_name: Optional[str] = None,
+        num_workers: Optional[int] = None,
         **kwargs,
     ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, Dict[str, str]]]:
         """Generate raw k-mer count features with optional raw sparse artefact persistence.
@@ -583,6 +574,9 @@ class FeatureWrapper:
             Base path (no suffix) for saved artefacts. Files written:
             ``<base>_sparse.npz``, ``<base>_rows.txt``, ``<base>_cols.txt``.
             If omitted, a deterministic name under ``<cache>/kmer_temp`` is used.
+        num_workers : int | None, optional
+            Worker process count override for k-mer counting. Defaults to the
+            wrapper-level threads setting when not provided.
         **kwargs : any
             Extra arguments forwarded to ``kmer.calculate_kmer_profiles``.
 
@@ -618,21 +612,35 @@ class FeatureWrapper:
             # Map feature_wrapper output format to kmer module return_type
             format_mapping = {
                 "dataframe": "dense_df",
-                "sparse_dataframe": "sparse_df", 
-                "matrix": "sparse_matrix"
+                "sparse_dataframe": "sparse_df",
+                "matrix": "sparse_matrix",
             }
             kmer_return_type = format_mapping.get(output_format, "sparse_df")
-            
+
             # Use cache directory for k-mer temporary files instead of system /tmp
             # This ensures the temp directory persists and is under user control
             kmer_temp_dir = os.path.join(self.base_cache_dir, "kmer_temp")
             os.makedirs(kmer_temp_dir, exist_ok=True)
-            
+
             # Run k-mer calculation using functions from kmer module
+            threads_override = kwargs.pop("threads", None)
+            effective_workers = (
+                num_workers
+                if num_workers is not None
+                else threads_override
+                if threads_override is not None
+                else self.default_threads
+            )
+            if effective_workers is not None and effective_workers < 1:
+                raise ValueError(
+                    "num_workers/threads must be a positive integer when provided."
+                )
+
             result = kmer.calculate_kmer_profiles(
                 input_path=input_path,
                 k_min=k_min,
                 k_max=k_max,
+                num_workers=effective_workers,
                 return_type=kmer_return_type,
                 temp_dir=kmer_temp_dir,
                 show_progress=self.show_progress,
@@ -652,6 +660,7 @@ class FeatureWrapper:
                         kmer_temp_dir, f"kmer_k{k_min}_{k_max}"
                     )
                     from scipy.sparse import save_npz
+
                     save_npz(f"{base}_sparse.npz", sparse_matrix)
                     with open(f"{base}_rows.txt", "w") as f_rows:
                         f_rows.write("\n".join(sequence_ids))
@@ -668,6 +677,7 @@ class FeatureWrapper:
                 # convert to CSR and persist.
                 if return_sparse_paths and output_format == "sparse_dataframe":
                     from scipy.sparse import csr_matrix, save_npz
+
                     base = sparse_base_name or os.path.join(
                         kmer_temp_dir, f"kmer_k{k_min}_{k_max}"
                     )
@@ -695,6 +705,377 @@ class FeatureWrapper:
         except Exception as e:
             logger.error(f"K-mer calculation failed: {e}")
             raise RuntimeError(f"K-mer calculation failed: {e}") from e
+
+    def _get_gffutils_cache_path(self, gtf_file: str) -> str:
+        """Generate cache database path for a GTF file.
+
+        Uses MD5 hash of GTF file contents for cache key to detect file changes.
+
+        Parameters
+        ----------
+        gtf_file : str
+            Path to GTF file
+
+        Returns
+        -------
+        str
+            Full path to cache database file
+        """
+        import hashlib
+
+        # Hash file contents, not path, to detect changes
+        abs_path = os.path.abspath(gtf_file)
+        md5_hash = hashlib.md5()
+
+        with open(abs_path, "rb") as f:
+            # Read in chunks to handle large files efficiently
+            for chunk in iter(lambda: f.read(8192), b""):
+                md5_hash.update(chunk)
+
+        gtf_hash = md5_hash.hexdigest()
+        cache_dir = os.path.join(self.base_cache_dir, "gffutils_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        return os.path.join(cache_dir, f"{gtf_hash}.db")
+
+    def gtf_transcripts_to_bed(
+        self,
+        gtf_file: str,
+        output_bed: str,
+        feature_type: str = "transcript",
+    ) -> str:
+        """Convert GTF transcript features to BED format for BWQ processing.
+
+        Creates BED6 format: chrom, start, end, transcript_id, score, strand.
+        Only includes transcript-level features (not exons).
+
+        Parameters
+        ----------
+        gtf_file : str
+            Path to input GTF file
+        output_bed : str
+            Path for output BED file
+        feature_type : str, default "transcript"
+            GTF feature type to extract
+
+        Returns
+        -------
+        str
+            Path to created BED file
+
+        Raises
+        ------
+        FileNotFoundError
+            If GTF file doesn't exist
+        ValueError
+            If no transcripts found in GTF
+        """
+        logger.info(f"Converting GTF to BED: {gtf_file} -> {output_bed}")
+
+        # Validate input
+        if not os.path.exists(gtf_file):
+            raise FileNotFoundError(f"GTF file not found: {gtf_file}")
+
+        try:
+            import pyranges as pr
+        except ImportError:
+            logger.error(
+                "pyranges is required for GTF to BED conversion. "
+                "Install with: pip install pyranges"
+            )
+            raise ImportError("pyranges is required")
+
+        # Read GTF file
+        try:
+            gtf_data = pr.read_gtf(gtf_file)
+            logger.info(f"Loaded GTF with {len(gtf_data)} total features")
+        except Exception as e:
+            logger.error(f"Failed to read GTF file: {e}")
+            raise ValueError(f"Invalid GTF file format: {e}")
+
+        # Filter for transcript-level features
+        gtf_df = gtf_data.df
+        if "Feature" not in gtf_df.columns:
+            raise ValueError("GTF file missing 'Feature' column")
+
+        transcript_df = gtf_df[gtf_df["Feature"] == feature_type].copy()
+
+        if len(transcript_df) == 0:
+            raise ValueError(f"No {feature_type} features found in GTF file")
+
+        logger.info(f"Found {len(transcript_df)} {feature_type} features")
+
+        # Extract required columns for BED6 format
+        if "transcript_id" not in transcript_df.columns:
+            raise ValueError("GTF file missing 'transcript_id' attribute")
+
+        # Create BED6 DataFrame
+        bed_df = pd.DataFrame(
+            {
+                "chrom": transcript_df["Chromosome"],
+                "start": transcript_df["Start"],
+                "end": transcript_df["End"],
+                "name": transcript_df["transcript_id"],
+                "score": ".",
+                "strand": transcript_df["Strand"],
+            }
+        )
+
+        # Write to BED file
+        bed_df.to_csv(output_bed, sep="\t", header=False, index=False)
+        logger.info(f"Wrote {len(bed_df)} transcripts to BED file: {output_bed}")
+
+        return output_bed
+
+    def extract_transcripts_from_gtf(
+        self,
+        gtf_file: str,
+        ref_genome_path: str,
+        output_fasta: str,
+        return_df: bool = False,
+        id_column: str = "transcript_id",
+        feature_type: str = "transcript",
+        use_cache: bool = True,
+        **kwargs,
+    ) -> Union[str, Tuple[str, pd.DataFrame]]:
+        """Extract spliced transcript sequences from GTF using gffutils.
+
+        This method:
+        - Creates/loads cached gffutils database
+        - Extracts properly spliced transcript sequences
+        - Handles strand orientation automatically
+        - Converts DNA to RNA (T → U)
+        - Warns about incomplete transcripts
+
+        Parameters
+        ----------
+        gtf_file : str
+            Path to GTF annotation file
+        ref_genome_path : str
+            Path to reference genome FASTA
+        output_fasta : str
+            Destination FASTA path for transcript sequences
+        return_df : bool, default False
+            If True, return DataFrame with sequences
+        id_column : str, default "transcript_id"
+            Column name for transcript identifiers
+        feature_type : str, default "transcript"
+            GTF feature type to extract
+        use_cache : bool, default True
+            Whether to cache gffutils database
+        **kwargs : any
+            Reserved for future expansion
+
+        Returns
+        -------
+        str or (str, DataFrame)
+            FASTA path, or tuple if return_df=True
+
+        Raises
+        ------
+        ImportError
+            If gffutils/pyfaidx not installed
+        FileNotFoundError
+            If GTF or genome FASTA missing
+        RuntimeError
+            If sequence extraction fails
+        """
+        logger.info(f"Extracting spliced sequences from GTF: {gtf_file}")
+
+        # Check for required dependencies
+        try:
+            import gffutils
+        except ImportError:
+            logger.error(
+                "gffutils is required for GTF-based sequence extraction. "
+                "Install with: pip install gffutils"
+            )
+            raise ImportError("gffutils is required")
+
+        try:
+            import pyfaidx
+        except ImportError:
+            logger.error(
+                "pyfaidx is required for sequence extraction. "
+                "Install with: pip install pyfaidx"
+            )
+            raise ImportError("pyfaidx is required")
+
+        # Validate input files
+        if not os.path.exists(gtf_file):
+            raise FileNotFoundError(f"GTF file not found: {gtf_file}")
+
+        if not os.path.exists(ref_genome_path):
+            raise FileNotFoundError(f"Reference genome not found: {ref_genome_path}")
+
+        # Get or create gffutils database
+        db_path = self._get_gffutils_cache_path(gtf_file)
+
+        if use_cache and os.path.exists(db_path):
+            logger.info(f"Loading cached gffutils database: {db_path}")
+            try:
+                db = gffutils.FeatureDB(db_path)
+            except Exception as e:
+                logger.warning(f"Failed to load cached database: {e}. Recreating...")
+                os.remove(db_path)
+                db = None
+        else:
+            db = None
+
+        if db is None:
+            logger.info("Creating gffutils database from GTF...")
+            try:
+                db = gffutils.create_db(
+                    gtf_file,
+                    dbfn=db_path if use_cache else ":memory:",
+                    force=True,
+                    keep_order=True,
+                    merge_strategy="merge",
+                    sort_attribute_values=True,
+                    disable_infer_transcripts=True,  # Don't infer transcripts from exons
+                    disable_infer_genes=True,  # Don't infer genes from transcripts
+                )
+                logger.info("gffutils database created successfully")
+            except Exception as e:
+                logger.error(f"Failed to create gffutils database: {e}")
+                raise RuntimeError(f"gffutils database creation failed: {e}")
+
+        # Extract sequences
+        total_transcripts = 0
+        empty_transcripts = 0
+        failed_transcripts = 0
+        sequences_written = 0
+
+        logger.info(f"Extracting sequences for {feature_type} features...")
+
+        try:
+            with open(output_fasta, "w") as fasta_handle:
+                for transcript in db.features_of_type(feature_type):
+                    total_transcripts += 1
+
+                    try:
+                        # Get transcript ID
+                        if "transcript_id" in transcript.attributes:
+                            transcript_id = transcript.attributes["transcript_id"][0]
+                        else:
+                            transcript_id = transcript.id
+
+                        # Check if transcript has exons
+                        exons = list(db.children(transcript, featuretype="exon"))
+                        if not exons:
+                            logger.warning(
+                                f"Transcript {transcript_id} has no exons in GTF. "
+                                f"Sequence extraction may fail or return genomic span."
+                            )
+
+                        # Extract sequence
+                        sequence = transcript.sequence(ref_genome_path, use_strand=True)
+
+                        if not sequence or len(sequence) == 0:
+                            empty_transcripts += 1
+                            logger.warning(
+                                f"Empty sequence extracted for {transcript_id}"
+                            )
+                            continue
+
+                        # Convert DNA to RNA (T -> U)
+                        rna_sequence = sequence.upper().replace("T", "U")
+
+                        # Write to FASTA
+                        fasta_handle.write(f">{transcript_id}\n")
+                        # Write in 60-character lines
+                        for i in range(0, len(rna_sequence), 60):
+                            fasta_handle.write(f"{rna_sequence[i : i + 60]}\n")
+
+                        sequences_written += 1
+
+                    except Exception as e:
+                        failed_transcripts += 1
+                        logger.warning(f"Failed to extract {transcript.id}: {e}")
+                        continue
+
+        except Exception as e:
+            logger.error(f"Error writing FASTA file: {e}")
+            raise RuntimeError(f"Failed to write sequences: {e}")
+
+        # Summary logging
+        logger.info(
+            f"Processed {total_transcripts} transcripts: "
+            f"{sequences_written} written, {empty_transcripts} empty, "
+            f"{failed_transcripts} failed"
+        )
+
+        if sequences_written == 0:
+            raise RuntimeError("No sequences were successfully extracted")
+
+        # Optionally return DataFrame
+        if return_df:
+            sequence_df = self._load_fasta_to_dataframe(
+                output_fasta, id_column=id_column
+            )
+            return output_fasta, sequence_df
+
+        return output_fasta
+
+    @staticmethod
+    def _load_fasta_to_dataframe(
+        fasta_path: str,
+        id_column: str = "transcript_id",
+    ) -> pd.DataFrame:
+        """Load sequences from a FASTA file into a tidy DataFrame.
+
+        Parameters
+        ----------
+        fasta_path : str
+            Path to the FASTA file to load.
+        id_column : str, default "transcript_id"
+            Name to assign to the identifier column in the resulting DataFrame.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Two-column DataFrame ``[id_column, 'Sequence']`` with RNA sequences
+            (T → U conversion applied).
+
+        Raises
+        ------
+        FileNotFoundError
+            If the FASTA file does not exist.
+        RuntimeError
+            If no records can be read from the FASTA file.
+        """
+        if not os.path.exists(fasta_path):
+            raise FileNotFoundError(f"FASTA file not found: {fasta_path}")
+
+        identifiers: List[str] = []
+        sequences: List[str] = []
+        current_id: Optional[str] = None
+        current_seq: List[str] = []
+
+        with open(fasta_path, "r") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith(">"):
+                    if current_id is not None:
+                        seq = "".join(current_seq).upper().replace("T", "U")
+                        identifiers.append(current_id)
+                        sequences.append(seq)
+                    current_id = line[1:].split()[0]
+                    current_seq = []
+                else:
+                    current_seq.append(line)
+
+        if current_id is not None:
+            seq = "".join(current_seq).upper().replace("T", "U")
+            identifiers.append(current_id)
+            sequences.append(seq)
+
+        if not identifiers:
+            raise RuntimeError(f"No FASTA records found in {fasta_path}")
+
+        fasta_df = pd.DataFrame({id_column: identifiers, "Sequence": sequences})
+        return fasta_df
 
     def extract_transcripts_from_bed(
         self,
@@ -874,20 +1255,29 @@ class FeatureWrapper:
         ``aggregate_features`` when raw matrices are supplied directly.
         """
         try:
-            from utils.kmer_redux import load_kmer_results, apply_kmer_transformations as _apply
+            from utils.kmer_redux import (
+                load_kmer_results,
+                apply_kmer_transformations as _apply,
+            )
         except ImportError:  # pragma: no cover
-            raise RuntimeError("kmer_redux utilities not available to load k-mer paths.")
+            raise RuntimeError(
+                "kmer_redux utilities not available to load k-mer paths."
+            )
 
         sparse_matrix, row_names, col_names = load_kmer_results(
             base_path,
-            redux_n_components if isinstance(redux_n_components, dict) else int(redux_n_components),
+            redux_n_components
+            if isinstance(redux_n_components, dict)
+            else int(redux_n_components),
             redux=False,  # perform redux via unified path below
             group_redux_kmer_len=group_kmer_redux_by_length,
             tfidf=False,  # handle tfidf in unified logic
             verbose=True,
         )
         if sparse_matrix is None:
-            raise RuntimeError(f"Failed to load k-mer artefacts from base path '{base_path}'.")
+            raise RuntimeError(
+                f"Failed to load k-mer artefacts from base path '{base_path}'."
+            )
 
         transformed_obj, transformed_names = _apply(
             sparse_matrix,
@@ -902,16 +1292,17 @@ class FeatureWrapper:
         if sparse and not isinstance(transformed_obj, pd.DataFrame):
             return transformed_obj
         if not isinstance(transformed_obj, pd.DataFrame):
-            transformed_obj = pd.DataFrame(transformed_obj, index=row_names, columns=transformed_names)
+            transformed_obj = pd.DataFrame(
+                transformed_obj, index=row_names, columns=transformed_names
+            )
         return transformed_obj
 
     def run_all(
         self,
-        bed_file: str,
-        config_file: str,
+        gtf_file: str,
         ref_genome_path: str,
-        hexamer_dat_path: str,
-        logit_model_path: str,
+        config_file: str,
+        bed_file: Optional[str] = None,
         fasta_file: Optional[str] = None,
         output_file: Optional[str] = None,
         k_min: int = 3,
@@ -930,19 +1321,17 @@ class FeatureWrapper:
 
         Parameters
         ----------
-        bed_file : str
-            Transcript regions for all dependent modules.
+        gtf_file : str
+            GTF annotation file (required). Used to extract properly spliced sequences
+            and auto-generate BED file for BWQ if not provided.
+        ref_genome_path : str
+            Reference genome FASTA file for sequence extraction.
         config_file : str
             BigWig/BigBed configuration for ``bwq``.
-        ref_genome_path : str
-            Genome FASTA for CPAT + sequence extraction.
-        hexamer_dat_path : str
-            CPAT hexamer frequencies.
-        logit_model_path : str
-            CPAT logistic regression model file.
+        bed_file : str, optional
+            Transcript regions for BWQ. Auto-generated from GTF if not provided.
         fasta_file : str, optional
-            Pre-existing FASTA to reuse for k-mer stage; if omitted a transient
-            FASTA is produced from BED (or CPAT output sequences).
+            Pre-existing FASTA to reuse. If omitted, sequences are extracted from GTF.
         output_file : str, optional
             Where to persist final parquet feature table.
         k_min, k_max : int, default 3..12
@@ -989,27 +1378,36 @@ class FeatureWrapper:
         Raises
         ------
         FileNotFoundError
-            If mandatory upstream files are missing.
+            If mandatory upstream files are missing (GTF, genome FASTA, config).
         RuntimeError
             If any stage irrecoverably fails or no sequences are retrievable.
         """
         logger.info("Running all feature extraction scripts...")
 
+        # Validate GTF file exists
+        if not os.path.exists(gtf_file):
+            raise FileNotFoundError(f"GTF file not found: {gtf_file}")
+
         # Set up composite progress tracking for all phases
         progress_manager = get_progress_manager(
-            show_progress=self.show_progress,
-            quiet=self.quiet
+            show_progress=self.show_progress, quiet=self.quiet
         )
-        
+
         # Create main progress bar for all feature extraction phases
         main_progress = progress_manager.create_bar(
-            total=4,  # BWQ, CPAT, MFE, K-mer
+            total=3,  # BWQ, MFE, K-mer (sequence extraction is preparatory)
             desc="Feature extraction",
-            unit="modules"
+            unit="modules",
         )
 
         # Create temporary directory for intermediate files
         with tempfile.TemporaryDirectory() as temp_dir:
+            # Generate BED from GTF if not provided
+            if bed_file is None:
+                bed_file = os.path.join(temp_dir, "transcripts_from_gtf.bed")
+                self.gtf_transcripts_to_bed(gtf_file, bed_file)
+                logger.info(f"Generated BED from GTF: {bed_file}")
+
             # Run BigWig Query
             main_progress.set_description("Running BigWig Query")
             bwq_output = os.path.join(temp_dir, "bwq_features.parquet")
@@ -1022,70 +1420,68 @@ class FeatureWrapper:
             main_progress.update(1)
             logger.info(f"BigWig Query completed. Shape: {bwq_df.shape}")
 
-            # Run CPAT
-            main_progress.set_description("Running CPAT analysis")
-            cpat_output = os.path.join(temp_dir, "cpat_features.parquet")
-            cpat_df = self.run_cpat(
-                bed_file=bed_file,
-                ref_genome_path=ref_genome_path,
-                hexamer_dat_path=hexamer_dat_path,
-                logit_model_path=logit_model_path,
-                output_file=cpat_output,
-                **kwargs,
+            # Acquire sequences for downstream stages
+            sequence_df: Optional[pd.DataFrame] = None
+            fasta_path: Optional[str] = fasta_file
+
+            if fasta_path:
+                logger.info(f"Loading sequences from provided FASTA: {fasta_path}")
+                sequence_df = self._load_fasta_to_dataframe(fasta_path)
+            else:
+                # Extract sequences from GTF (always uses GTF-based extraction)
+                fasta_output = os.path.join(temp_dir, "sequences_from_gtf.fasta")
+                try:
+                    fasta_path, sequence_df = self.extract_transcripts_from_gtf(
+                        gtf_file=gtf_file,
+                        ref_genome_path=ref_genome_path,
+                        output_fasta=fasta_output,
+                        return_df=True,
+                    )  # type: ignore[assignment]
+                    logger.info(
+                        f"GTF sequence extraction completed. FASTA: {fasta_path} SeqDF shape: {sequence_df.shape if sequence_df is not None else 'None'}"
+                    )
+                except Exception as e:
+                    logger.error(f"GTF sequence extraction failed: {e}")
+                    raise RuntimeError(
+                        "Unable to extract transcript sequences from GTF"
+                    ) from e
+
+            if sequence_df is None or sequence_df.empty:
+                raise RuntimeError(
+                    "No sequences available for downstream feature generation"
+                )
+
+            # Normalise transcript identifier column
+            if "transcript_id" not in sequence_df.columns:
+                id_col_candidates = ["NAME", "Name", "id", "Id"]
+                match = next(
+                    (col for col in id_col_candidates if col in sequence_df.columns),
+                    None,
+                )
+                if match:
+                    sequence_df = sequence_df[[match, "Sequence"]].rename(
+                        columns={match: "transcript_id"}
+                    )
+                else:
+                    logger.warning(
+                        "Sequence DataFrame missing explicit identifier; synthesising transcript IDs"
+                    )
+                    sequence_df = sequence_df.reset_index(drop=True)
+                    sequence_df.insert(
+                        0,
+                        "transcript_id",
+                        [f"seq_{i}" for i in range(len(sequence_df))],
+                    )
+            else:
+                sequence_df = sequence_df[["transcript_id", "Sequence"]]
+
+            # Ensure RNA alphabet
+            sequence_df["Sequence"] = (
+                sequence_df["Sequence"]
+                .astype(str)
+                .str.upper()
+                .str.replace("T", "U", regex=False)
             )
-            main_progress.update(1)
-            logger.info(f"CPAT completed. Shape: {cpat_df.shape}")
-
-            # Extract sequences from BED regions using pyranges (now returns DataFrame)
-            fasta_output = os.path.join(temp_dir, "sequences.fasta")
-            seq_df: Optional[pd.DataFrame] = None
-            try:
-                fasta_result = self.extract_transcripts_from_bed(
-                    bed_file=bed_file,
-                    output_fasta=fasta_output,
-                    ref_genome_path=ref_genome_path,
-                    return_df=True,
-                )
-                fasta_file, seq_df = fasta_result  # type: ignore
-                logger.info(
-                    f"Sequence extraction completed. FASTA: {fasta_file} SeqDF shape: {seq_df.shape if seq_df is not None else 'None'}"
-                )
-            except Exception as e:
-                logger.error(f"Sequence extraction failed: {e}")
-                seq_df = None
-
-            # If CPAT produced sequences, prefer them (may include processed ORF-based sequence choices)
-            if "Sequence" in cpat_df.columns and cpat_df["Sequence"].notna().any():
-                logger.info("Using sequences from CPAT output (preferred)")
-                seq_source_df = cpat_df
-            elif seq_df is not None:
-                logger.info("Using sequences extracted directly from BED ranges")
-                seq_source_df = seq_df
-            else:
-                raise RuntimeError("No sequences available from CPAT or BED extraction")
-
-            # Extract sequences from BED file for MFE calculation
-            # This assumes that the CPAT module has already extracted sequences
-            # and added them to the DataFrame. If not, we would need to add that step.
-            id_col = "NAME" if "NAME" in cpat_df.columns else "transcript_id"
-            
-            # Build sequence_df with consistent transcript_id column
-            if id_col in seq_source_df.columns:
-                sequence_df = seq_source_df[[id_col, "Sequence"]].rename(
-                    columns={id_col: "transcript_id"}
-                )
-            elif "transcript_id" in seq_source_df.columns:
-                sequence_df = seq_source_df[["transcript_id", "Sequence"]]
-            else:
-                # Fallback: create synthetic transcript_id
-                logger.warning(
-                    "No suitable ID column found in sequence source; generating synthetic IDs."
-                )
-                sequence_df = seq_source_df.reset_index().rename(
-                    columns={"index": "transcript_id"}
-                )
-                if "transcript_id" not in sequence_df.columns:
-                    sequence_df.insert(0, "transcript_id", [f"seq_{i}" for i in range(len(sequence_df))])
 
             # Run MFE
             main_progress.set_description("Calculating RNA MFE")
@@ -1105,7 +1501,11 @@ class FeatureWrapper:
             if use_saved_kmer_base:
                 main_progress.set_description("Loading saved k-mer artefacts")
                 # Prepare dict of expected paths (only sparse_matrix key strictly needed)
-                base = use_saved_kmer_base[:-12] if use_saved_kmer_base.endswith("_sparse.npz") else use_saved_kmer_base
+                base = (
+                    use_saved_kmer_base[:-12]
+                    if use_saved_kmer_base.endswith("_sparse.npz")
+                    else use_saved_kmer_base
+                )
                 kmer_paths = {
                     "sparse_matrix": f"{base}_sparse.npz",
                     "rows": f"{base}_rows.txt",
@@ -1113,7 +1513,9 @@ class FeatureWrapper:
                 }
                 # Validate required file exists
                 if not os.path.exists(kmer_paths["sparse_matrix"]):
-                    raise FileNotFoundError(f"Saved k-mer sparse matrix not found: {kmer_paths['sparse_matrix']}")
+                    raise FileNotFoundError(
+                        f"Saved k-mer sparse matrix not found: {kmer_paths['sparse_matrix']}"
+                    )
                 main_progress.update(1)
                 logger.info(f"Using saved k-mer artefacts base: {base}")
             else:
@@ -1121,10 +1523,12 @@ class FeatureWrapper:
                 main_progress.set_description("Calculating k-mer features")
                 kmer_output = os.path.join(temp_dir, "kmer_features.parquet")
                 output_format = "sparse_dataframe" if sparse else "dataframe"
-                if fasta_file is None:
-                    raise RuntimeError("FASTA path not available for k-mer computation.")
+                if fasta_path is None:
+                    raise RuntimeError(
+                        "FASTA path not available for k-mer computation."
+                    )
                 kmer_result = self.run_kmer(
-                    input_path=fasta_file,
+                    input_path=fasta_path,
                     k_min=k_min,
                     k_max=k_max,
                     output_file=kmer_output,
@@ -1136,9 +1540,13 @@ class FeatureWrapper:
                 if return_kmer_sparse_paths and isinstance(kmer_result, tuple):
                     kmer_df, kmer_paths = kmer_result
                 else:
-                    kmer_df = kmer_result if not isinstance(kmer_result, tuple) else kmer_result[0]
+                    kmer_df = (
+                        kmer_result
+                        if not isinstance(kmer_result, tuple)
+                        else kmer_result[0]
+                    )
                 main_progress.update(1)
-                if kmer_df is not None and hasattr(kmer_df, 'shape'):
+                if kmer_df is not None and hasattr(kmer_df, "shape"):
                     logger.info(f"K-mer completed. Shape: {kmer_df.shape}")
                 else:
                     logger.info("K-mer completed.")
@@ -1147,7 +1555,6 @@ class FeatureWrapper:
             result_df = self.aggregate_features(
                 bed_file=bed_file,
                 bwq_df=bwq_df,
-                cpat_df=cpat_df,
                 mfe_df=mfe_df,
                 kmer_df=kmer_df,
                 kmer_sparse_paths=kmer_paths,
@@ -1159,7 +1566,7 @@ class FeatureWrapper:
             )
 
             if kmer_paths and return_kmer_sparse_paths:
-                result_df.attrs['kmer_sparse_paths'] = kmer_paths
+                result_df.attrs["kmer_sparse_paths"] = kmer_paths
 
             # Save output if requested
             if output_file:
@@ -1174,7 +1581,6 @@ class FeatureWrapper:
         self,
         bed_file: Optional[str] = None,
         bwq_df: Optional[pd.DataFrame] = None,
-        cpat_df: Optional[pd.DataFrame] = None,
         mfe_df: Optional[pd.DataFrame] = None,
         kmer_df: Optional[Union[pd.DataFrame, sparse.csr_matrix]] = None,
         kmer_sparse_paths: Optional[Dict[str, str]] = None,
@@ -1195,7 +1601,7 @@ class FeatureWrapper:
         ----------
         bed_file : str, optional
             BED file path; when present its ``Name`` column seeds the join index.
-        bwq_df, cpat_df, mfe_df : pandas.DataFrame
+        bwq_df, mfe_df : pandas.DataFrame
             Mandatory feature provider outputs.
         kmer_df : pandas.DataFrame | scipy.sparse.csr_matrix, optional
             Raw k-mer counts (dense sparse-aware DataFrame or CSR matrix) produced
@@ -1242,52 +1648,91 @@ class FeatureWrapper:
         # Validate mandatory components; k-mer can be deferred via kmer_sparse_paths
         mandatory_pairs = [
             (bwq_df, "BigWig Query"),
-            (cpat_df, "CPAT"),
             (mfe_df, "MFE"),
         ]
         missing = [name for df, name in mandatory_pairs if df is None]
         if missing:
-            raise ValueError(f"Missing required feature DataFrames: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required feature DataFrames: {', '.join(missing)}"
+            )
         if kmer_df is None and kmer_sparse_paths is None:
-            raise ValueError("Either kmer_df or kmer_sparse_paths must be supplied for k-mer features.")
+            raise ValueError(
+                "Either kmer_df or kmer_sparse_paths must be supplied for k-mer features."
+            )
 
         # Check if id_col exists in tabular (non-sparse-matrix) DataFrames
         try:
             import scipy.sparse as sp  # type: ignore
         except Exception:  # pragma: no cover
+
             class Dummy:
                 @staticmethod
                 def issparse(x):
                     return False
+
             sp = Dummy()  # type: ignore
-        for cand, name in [(bwq_df, "BigWig Query"), (cpat_df, "CPAT"), (mfe_df, "MFE"), (kmer_df, "K-mer")]:
+
+        for cand, name in [
+            (bwq_df, "BigWig Query"),
+            (mfe_df, "MFE"),
+            (kmer_df, "K-mer"),
+        ]:
             if cand is None:
                 continue
             if sp.issparse(cand):
                 continue
             if id_col not in cand.columns and "transcript_id" not in cand.columns:
-                logger.warning(f"{id_col} column not found in {name} DataFrame. Merging may fail.")
+                logger.warning(
+                    f"{id_col} column not found in {name} DataFrame. Merging may fail."
+                )
 
-        # Start with an empty DataFrame
-        df = pd.DataFrame()
-
-        # Extract the Name column from the input BED file to use as primary key
+        # Start from BED-derived identifiers when available to retain positional columns
         if bed_file and os.path.exists(bed_file):
-            bed_df = pr.read_bed(bed_file)
-            bed_base_series = bed_df.df["Name"] if "Name" in bed_df.columns else bed_df.df.get("transcript_id")
-            if bed_base_series is None:
+            bed_ranges = pr.read_bed(bed_file)
+            bed_frame = bed_ranges.df.copy()
+            if id_col in bed_frame.columns:
+                pass
+            elif "Name" in bed_frame.columns:
+                bed_frame = bed_frame.rename(columns={"Name": id_col})
+            elif "transcript_id" in bed_frame.columns:
+                bed_frame = bed_frame.rename(columns={"transcript_id": id_col})
+            else:
                 raise ValueError(f"{id_col} not found in BED file")
-            df[id_col] = bed_base_series
+
+            # Compute canonical length prior to renaming other columns
+            start_col = next(
+                (c for c in ["Start", "start"] if c in bed_frame.columns), None
+            )
+            end_col = next((c for c in ["End", "end"] if c in bed_frame.columns), None)
+            if start_col and end_col and "length" not in bed_frame.columns:
+                bed_frame["length"] = bed_frame[end_col] - bed_frame[start_col]
+
+            # Prefix remaining BED columns to avoid collisions downstream
+            rename_map = {}
+            for col in bed_frame.columns:
+                if col in {id_col, "length"}:
+                    continue
+                rename_map[col] = f"bed_{col.lower()}"
+            if rename_map:
+                bed_frame = bed_frame.rename(columns=rename_map)
+
+            # Retain only unique transcript entries to avoid duplicate indices
+            df = bed_frame.drop_duplicates(subset=[id_col])
         else:
-            logger.warning("BED file not provided or not found. Using CPAT DataFrame as base.")
-            assert cpat_df is not None
-            use_col = id_col if id_col in cpat_df.columns else "transcript_id"
-            if use_col not in cpat_df.columns:
-                raise ValueError(f"{id_col} not found in CPAT DataFrame")
-            base_ids = cpat_df[[use_col]].copy()
+            logger.warning(
+                "BED file not provided or not found. Using BigWig DataFrame as base."
+            )
+            if bwq_df is None:
+                raise ValueError(
+                    "Cannot infer transcript identifiers without BED file or BigWig DataFrame"
+                )
+            use_col = id_col if id_col in bwq_df.columns else "transcript_id"
+            if use_col not in bwq_df.columns:
+                raise ValueError(f"{id_col} not found in BigWig DataFrame")
+            base_ids = bwq_df[[use_col]].copy()
             if use_col != id_col:
                 base_ids = base_ids.rename(columns={use_col: id_col})
-            df = base_ids
+            df = base_ids.drop_duplicates(subset=[id_col])
 
         df.set_index(id_col, inplace=True)
 
@@ -1298,27 +1743,12 @@ class FeatureWrapper:
         if id_col in bwq_df.columns:
             bwq_df = bwq_df.set_index(id_col, drop=True)
         elif "transcript_id" in bwq_df.columns and id_col != "transcript_id":
-            bwq_df = bwq_df.rename(columns={"transcript_id": id_col}).set_index(id_col, drop=True)
+            bwq_df = bwq_df.rename(columns={"transcript_id": id_col}).set_index(
+                id_col, drop=True
+            )
 
         # Merge with main DataFrame
         df = df.merge(bwq_df, how="inner", left_index=True, right_index=True)
-
-        # Merge CPAT features
-        # Add the prefix 'cpat_' to CPAT columns (except identifier) to avoid name clashes
-        assert cpat_df is not None
-        join_col = id_col if id_col in cpat_df.columns else "transcript_id"
-        id_preserved = cpat_df[join_col]
-        feature_cols = [c for c in cpat_df.columns if c != join_col]
-        cpat_features = cpat_df[feature_cols].add_prefix("cpat_")
-        cpat_df = pd.concat([id_preserved, cpat_features], axis=1)
-
-        # Set index if needed
-        if "transcript_id" in cpat_df.columns and id_col != "transcript_id":
-            cpat_df = cpat_df.rename(columns={"transcript_id": id_col})
-        cpat_df = cpat_df.set_index(id_col, drop=True)
-
-        # Merge with main DataFrame
-        df = df.merge(cpat_df, how="inner", left_index=True, right_index=True)
 
         # Merge MFE features if provided
         assert mfe_df is not None
@@ -1352,10 +1782,14 @@ class FeatureWrapper:
                     df.attrs["kmer_transformed_sparse"] = transformed
                 else:
                     if not isinstance(transformed, pd.DataFrame):
-                        transformed = pd.DataFrame(transformed.toarray(), index=df.index)
+                        transformed = pd.DataFrame(
+                            transformed.toarray(), index=df.index
+                        )
                     if transformed.index.name != df.index.name:
                         transformed.index = df.index
-                    df = df.merge(transformed, how="inner", left_index=True, right_index=True)
+                    df = df.merge(
+                        transformed, how="inner", left_index=True, right_index=True
+                    )
             except Exception as e:
                 logger.error(f"Failed loading k-mer sparse artifacts: {e}")
         elif kmer_df is not None:
@@ -1366,9 +1800,27 @@ class FeatureWrapper:
                 elif "transcript_id" in kmer_work.columns and id_col != "transcript_id":
                     kmer_work.rename(columns={"transcript_id": id_col}, inplace=True)
                     kmer_work.set_index(id_col, inplace=True)
-                if apply_kmer_transformations is not None and (use_dim_redux or use_tfidf):
+                else:
+                    # Fall back to using the existing index as transcript identifier when aligned
+                    if kmer_work.index.name in {None, "index"} and len(
+                        kmer_work.index
+                    ) == len(df.index):
+                        kmer_work.index = pd.Index(df.index, name=id_col)
+                    elif (
+                        kmer_work.index.name == "transcript_id"
+                        and id_col != "transcript_id"
+                    ):
+                        kmer_work.index.name = id_col
+                if apply_kmer_transformations is not None and (
+                    use_dim_redux or use_tfidf
+                ):
                     from scipy.sparse import csr_matrix
-                    csr = csr_matrix(kmer_work.sparse.to_coo() if hasattr(kmer_work, 'sparse') else kmer_work.to_numpy())
+
+                    csr = csr_matrix(
+                        kmer_work.sparse.to_coo()
+                        if hasattr(kmer_work, "sparse")
+                        else kmer_work.to_numpy()
+                    )
                     ids = df.index.tolist()
                     kmer_names = [str(c) for c in kmer_work.columns]
                     transformed_obj, transformed_names = apply_kmer_transformations(
@@ -1391,12 +1843,21 @@ class FeatureWrapper:
                                 index=df.index,
                                 columns=transformed_names,
                             )
-                        df = df.merge(transformed_obj, how="inner", left_index=True, right_index=True)
+                        df = df.merge(
+                            transformed_obj,
+                            how="inner",
+                            left_index=True,
+                            right_index=True,
+                        )
                 else:
-                    df = df.merge(kmer_work, how="inner", left_index=True, right_index=True)
+                    df = df.merge(
+                        kmer_work, how="inner", left_index=True, right_index=True
+                    )
             else:
                 if apply_kmer_transformations is None:
-                    logger.warning("kmer_redux utilities not available; skipping k-mer transformations.")
+                    logger.warning(
+                        "kmer_redux utilities not available; skipping k-mer transformations."
+                    )
                     if sparse:
                         df.attrs["kmer_sparse"] = kmer_df
                     else:
@@ -1406,7 +1867,9 @@ class FeatureWrapper:
                             index=df.index,
                             columns=[f"kmer_{i}" for i in range(dense.shape[1])],
                         )
-                        df = df.merge(dense_df, how="inner", left_index=True, right_index=True)
+                        df = df.merge(
+                            dense_df, how="inner", left_index=True, right_index=True
+                        )
                 else:
                     ids = df.index.tolist()
                     kmer_names = [f"kmer_{i}" for i in range(kmer_df.shape[1])]
@@ -1430,19 +1893,41 @@ class FeatureWrapper:
                                 index=ids,
                                 columns=transformed_names,
                             )
-                        df = df.merge(transformed_obj, how="inner", left_index=True, right_index=True)
+                        df = df.merge(
+                            transformed_obj,
+                            how="inner",
+                            left_index=True,
+                            right_index=True,
+                        )
 
         # Reset index to make the primary key a column again
         df.reset_index(inplace=True)
 
-        # Add the length column
-        start_col = "Start" if "Start" in df.columns else "start" if "start" in df.columns else None
-        end_col = "End" if "End" in df.columns else "end" if "end" in df.columns else None
-        if start_col and end_col:
-            df["length"] = df[end_col] - df[start_col]
-        else:
-            raise ValueError("Start and End columns not found for length calculation.")
-        
+        # Ensure length column present for downstream consumption
+        if "length" not in df.columns:
+            start_candidates = ["Start", "start", "bed_start"]
+            end_candidates = ["End", "end", "bed_end"]
+            start_col = next((c for c in start_candidates if c in df.columns), None)
+            end_col = next((c for c in end_candidates if c in df.columns), None)
+            if start_col and end_col:
+                df["length"] = df[end_col] - df[start_col]
+            else:
+                raise ValueError(
+                    "Start and End columns not found for length calculation."
+                )
+
+        # Remove any residual duplicate columns that may have slipped through
+        if df.columns.duplicated().any():
+            df = df.loc[:, ~df.columns.duplicated()]
+
+        # Drop all BED-related columns (prefixed with 'bed_') except length and id_col
+        bed_cols_to_drop = [col for col in df.columns if str(col).startswith("bed_")]
+        if bed_cols_to_drop:
+            logger.info(
+                f"Dropping {len(bed_cols_to_drop)} BED coordinate columns: {bed_cols_to_drop}"
+            )
+            df = df.drop(columns=bed_cols_to_drop)
+
         logger.info(f"Aggregated feature DataFrame shape: {df.shape}")
 
         df.columns = [str(col).lower() for col in df.columns]
@@ -1453,8 +1938,8 @@ class FeatureWrapper:
 def main():
     """CLI entry point.
 
-    Provides subcommands for individual feature modules (``bwq``, ``cpat``,
-    ``mfe``, ``kmer``) plus ``all`` (full pipeline) and ``cache`` management.
+    Provides subcommands for individual feature modules (``bwq``, ``mfe``,
+    ``kmer``) plus ``all`` (full pipeline) and ``cache`` management.
     Argument parsing delegates to corresponding wrapper methods. Exit codes are
     propagated from unhandled exceptions; normal completion prints shape info
     for executed tasks.
@@ -1468,6 +1953,12 @@ def main():
         "--log-level",
         default="INFO",
         help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    parser.add_argument(
+        "-t",
+        "--threads",
+        type=int,
+        help="Number of worker threads/processes to use across feature generators",
     )
 
     # Caching arguments
@@ -1503,35 +1994,6 @@ def main():
         help="Path to YAML configuration file specifying BigWig/BigBed files and statistics",
     )
     bwq_parser.add_argument(
-        "--output", "-o", help="Output file path for the results (parquet format)"
-    )
-
-    # CPAT command
-    cpat_parser = subparsers.add_parser("cpat", help="Run CPAT feature extraction")
-    cpat_parser.add_argument(
-        "--bed", required=True, help="Path to BED file containing regions to query"
-    )
-    cpat_parser.add_argument(
-        "--ref-genome", required=True, help="Path to reference genome FASTA file"
-    )
-    cpat_parser.add_argument(
-        "--hexamer", required=True, help="Path to hexamer frequency table file"
-    )
-    cpat_parser.add_argument(
-        "--logit-model",
-        required=True,
-        help="Path to logistic regression model (.RData file)",
-    )
-    cpat_parser.add_argument(
-        "--min-orf-len", type=int, default=75, help="Minimum ORF length in nucleotides"
-    )
-    cpat_parser.add_argument(
-        "--n-top-orf",
-        type=int,
-        default=5,
-        help="Max number of ORF candidates per strand to consider per transcript",
-    )
-    cpat_parser.add_argument(
         "--output", "-o", help="Output file path for the results (parquet format)"
     )
 
@@ -1584,7 +2046,9 @@ def main():
         "--output", "-o", help="Output file path for the results (parquet format)"
     )
     kmer_parser.add_argument(
-        "--return-sparse-paths", action="store_true", help="Persist and return raw sparse k-mer artefact paths"
+        "--return-sparse-paths",
+        action="store_true",
+        help="Persist and return raw sparse k-mer artefact paths",
     )
     kmer_parser.add_argument(
         "--sparse-base", help="Base path (no suffix) to save sparse k-mer artefacts"
@@ -1593,7 +2057,17 @@ def main():
     # Run all command
     all_parser = subparsers.add_parser("all", help="Run all feature extraction scripts")
     all_parser.add_argument(
-        "--bed", required=True, help="Path to BED file containing regions to query"
+        "--gtf",
+        required=True,
+        help="Path to GTF annotation file (required for sequence extraction and BED generation)",
+    )
+    all_parser.add_argument(
+        "--bed",
+        help="Path to BED file containing regions to query (optional, auto-generated from GTF if not provided)",
+    )
+    all_parser.add_argument(
+        "--fasta",
+        help="Path to pre-extracted FASTA sequences (optional, auto-extracted from GTF if not provided)",
     )
     all_parser.add_argument(
         "--bwq-config",
@@ -1602,14 +2076,6 @@ def main():
     )
     all_parser.add_argument(
         "--ref-genome", required=True, help="Path to reference genome FASTA file"
-    )
-    all_parser.add_argument(
-        "--hexamer", required=True, help="Path to hexamer frequency table file"
-    )
-    all_parser.add_argument(
-        "--logit-model",
-        required=True,
-        help="Path to logistic regression model (.RData file)",
     )
     all_parser.add_argument("--k-min", type=int, default=3, help="Minimum k-mer length")
     all_parser.add_argument(
@@ -1643,13 +2109,17 @@ def main():
         "--output", "-o", help="Output file path for the results (parquet format)"
     )
     all_parser.add_argument(
-        "--kmer-sparse-base", help="Base path (no suffix) to save raw k-mer sparse artefacts"
+        "--kmer-sparse-base",
+        help="Base path (no suffix) to save raw k-mer sparse artefacts",
     )
     all_parser.add_argument(
-        "--use-saved-kmer-base", help="Base path (no suffix) of previously saved raw k-mer artefacts to reuse"
+        "--use-saved-kmer-base",
+        help="Base path (no suffix) of previously saved raw k-mer artefacts to reuse",
     )
     all_parser.add_argument(
-        "--return-kmer-sparse-paths", action="store_true", help="Return and attach raw k-mer sparse artefact paths"
+        "--return-kmer-sparse-paths",
+        action="store_true",
+        help="Return and attach raw k-mer sparse artefact paths",
     )
 
     # Cache management command
@@ -1667,7 +2137,7 @@ def main():
     cache_clear_parser = cache_subparsers.add_parser("clear", help="Clear the cache")
 
     args = parser.parse_args()
-    
+
     # Resolve progress settings from CLI arguments
     progress_settings = resolve_progress_settings(args)
 
@@ -1677,6 +2147,7 @@ def main():
         cache_dir=args.cache_dir,
         keep_downloaded_files=not args.no_cache,
         clear_cache_on_startup=args.clear_cache,
+        threads=args.threads,
         **progress_settings,
     )
 
@@ -1706,30 +2177,24 @@ def main():
 
     elif args.command == "bwq":
         result = wrapper.run_bwq(
-            bed_file=args.bed, config_file=args.bwq_config, output_file=args.output
+            bed_file=args.bed,
+            config_file=args.bwq_config,
+            output_file=args.output,
+            threads=args.threads,
         )
         logger.info(f"BigWig Query completed. Shape: {result.shape}")
-
-    elif args.command == "cpat":
-        result = wrapper.run_cpat(
-            bed_file=args.bed,
-            ref_genome_path=args.ref_genome,
-            hexamer_dat_path=args.hexamer,
-            logit_model_path=args.logit_model,
-            min_orf_len=args.min_orf_len,
-            n_top_orf=args.n_top_orf,
-            output_file=args.output,
-        )
-        logger.info(f"CPAT completed. Shape: {result.shape}")
 
     elif args.command == "mfe":
         # Load input DataFrame
         df_input = pd.read_parquet(args.input)
+        num_processes = (
+            args.num_processes if args.num_processes is not None else args.threads
+        )
         result = wrapper.run_mfe(
             df_input=df_input,
             sequence_col=args.sequence_col,
             include_structure=args.include_structure,
-            num_processes=args.num_processes,
+            num_processes=num_processes,
             output_file=args.output,
         )
         logger.info(f"MFE completed. Shape: {result.shape}")
@@ -1743,19 +2208,22 @@ def main():
             output_file=args.output,
             return_sparse_paths=args.return_sparse_paths,
             sparse_base_name=args.sparse_base,
+            num_workers=args.threads,
         )
         if isinstance(result, tuple):
-            logger.info(f"K-mer completed. Shape: {result[0].shape}; paths: {result[1]}")
+            logger.info(
+                f"K-mer completed. Shape: {result[0].shape}; paths: {result[1]}"
+            )
         else:
             logger.info(f"K-mer completed. Shape: {result.shape}")
 
     elif args.command == "all":
         result = wrapper.run_all(
+            gtf_file=args.gtf,
             bed_file=args.bed,
+            fasta_file=args.fasta,
             config_file=args.bwq_config,
             ref_genome_path=args.ref_genome,
-            hexamer_dat_path=args.hexamer,
-            logit_model_path=args.logit_model,
             k_min=args.k_min,
             k_max=args.k_max,
             use_dim_redux=args.use_dim_redux,
@@ -1767,6 +2235,7 @@ def main():
             kmer_sparse_base=args.kmer_sparse_base,
             use_saved_kmer_base=args.use_saved_kmer_base,
             return_kmer_sparse_paths=args.return_kmer_sparse_paths,
+            threads=args.threads,
         )
         logger.info(f"All feature extraction completed. Shape: {result.shape}")
 

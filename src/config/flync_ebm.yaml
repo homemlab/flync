@@ -29,6 +29,59 @@ default_metric_combinations:
 
 # Dataset configurations - each represents a different dataset with its own parameters
 dataset_configs:
+  FINAL_ebm_round2:
+      name: "Final EBM optimization experiment"
+      description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No filter applied. No CPAT. Contains final dataset corrections and seequence extraction."
+      
+      # Dataset paths
+      train_data: "X_train_gffutils.parquet"
+      test_data: "X_test_gffutils.parquet"
+      holdout_data: "X_val_gffutils.parquet"
+      target_column: "y"
+      dataset_suffix: "FINAL_ebm_round2"
+
+      # Experiment configuration
+      experiment_name: "FINAL_ebm_round2"
+
+      # Feature correlation analysis
+      # analyze_correlations: true
+      # correlation_threshold: 0.90
+      
+      # Tags specific to this dataset
+      tags:
+        dataset_imbalance_technique: "none"
+        dataset_kmer_redux: "true"
+        features_cpat: "false"
+        features_regulators_mhe: ["remap", "tfbs"]
+        features_ss: "true"
+        features_filter: "none"
+
+  # FINAL_ebm_round1:
+  #     name: "Final EBM optimization experiment"
+  #     description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No filter applied. No CPAT. Contains final dataset corrections and seequence extraction."
+      
+  #     # Dataset paths
+  #     train_data: "X_train_gffutils.parquet"
+  #     test_data: "X_test_gffutils.parquet"
+  #     holdout_data: "X_val_gffutils.parquet"
+  #     target_column: "y"
+  #     dataset_suffix: "FINAL_ebm_round1"
+
+  #     # Experiment configuration
+  #     experiment_name: "FINAL_ebm_round1"
+
+  #     # Feature correlation analysis
+  #     analyze_correlations: true
+  #     correlation_threshold: 0.90
+      
+  #     # Tags specific to this dataset
+  #     tags:
+  #       dataset_imbalance_technique: "none"
+  #       dataset_kmer_redux: "true"
+  #       features_cpat: "false"
+  #       features_regulators_mhe: ["remap", "tfbs"]
+  #       features_ss: "true"
+  #       features_filter: "none"
 
   # CORR_ebm_cpat_cod_prob_redux:
   #   name: "EBM optimization experiment with redux_raw dataset"
@@ -58,33 +111,33 @@ dataset_configs:
   #     features_ss: "true"
   #     features_filter: "none"
 
-  CORR_ebm_redux:
-    name: "EBM optimization experiment with redux_raw dataset"
-    description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No filter applied. No CPAT. Contains final dataset corrections."
+  # CORR_ebm_redux:
+  #   name: "EBM optimization experiment with redux_raw dataset"
+  #   description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No filter applied. No CPAT. Contains final dataset corrections."
     
-    # Dataset paths
-    train_data: "CORR/X_train_redux.parquet"
-    test_data: "CORR/X_test_redux.parquet"
-    holdout_data: "CORR/X_val_redux.parquet"
-    target_column: "y"
-    dataset_suffix: "CORR_ebm_redux_raw"
+  #   # Dataset paths
+  #   train_data: "CORR/X_train_redux.parquet"
+  #   test_data: "CORR/X_test_redux.parquet"
+  #   holdout_data: "CORR/X_val_redux.parquet"
+  #   target_column: "y"
+  #   dataset_suffix: "CORR_ebm_redux_raw"
 
-    # Experiment configuration
-    experiment_name: "CORR_ebm_redux_raw"
+  #   # Experiment configuration
+  #   experiment_name: "CORR_ebm_redux_raw"
 
-    # Feature correlation analysis
-    #analyze_correlations: true
-    #correlation_threshold: 0.95
-    drop_features_file: "src/config/CORR_flync_ebm.txt"
+  #   # Feature correlation analysis
+  #   #analyze_correlations: true
+  #   #correlation_threshold: 0.95
+  #   drop_features_file: "src/config/CORR_flync_ebm.txt"
     
-    # Tags specific to this dataset
-    tags:
-      dataset_imbalance_technique: "none"
-      dataset_kmer_redux: "true"
-      features_cpat: "false"
-      features_regulators_mhe: ["remap", "tfbs"]
-      features_ss: "true"
-      features_filter: "none"
+  #   # Tags specific to this dataset
+  #   tags:
+  #     dataset_imbalance_technique: "none"
+  #     dataset_kmer_redux: "true"
+  #     features_cpat: "false"
+  #     features_regulators_mhe: ["remap", "tfbs"]
+  #     features_ss: "true"
+  #     features_filter: "none"
 
   # CORR_ebm_cpat_cod_prob:
   #   name: "EBM optimization experiment with redux_raw dataset"
@@ -197,8 +250,6 @@ dataset_configs:
   #     features_regulators_mhe: ["remap", "tfbs"]
   #     features_ss: "true"
   #     features_filter: "none"
-
-
 
   # EXPAND_ebm_filter_1_cpat_cod_prob:
   #   name: "EBM optimization experiment with redux_filter_1 dataset"
