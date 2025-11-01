@@ -19,8 +19,9 @@ else:
     try:
         prefix=sys.argv[3]
         predict_table=outpath/str(prefix+'.csv')
-    except:
-        print("Couldn't find the correct table")
+    except (IndexError, FileNotFoundError) as e:
+        print(f"Couldn't find the correct table: {e}")
+        sys.exit(1)
 
 # READ THE FEATURE TABLE FOR PREDICTION
 pt=pd.read_csv(predict_table)
