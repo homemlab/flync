@@ -120,5 +120,9 @@ flync/
 ├── model/              # Pre-trained ML model
 ├── pyproject.toml      # Package metadata and dependencies
 ├── environment.yml     # Unified conda environment
-└── install.sh          # Installation script
+├── install.sh          # Installation script (recommended)
+├── conda-env           # Legacy installation script (deprecated)
+└── flync               # Legacy CLI wrapper (deprecated, use 'pip install -e .' instead)
 ```
+
+**Note**: The root `flync` script is deprecated in favor of installing the package with pip. After installation, the `flync` command will be available globally in your environment.

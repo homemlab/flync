@@ -2,9 +2,8 @@ FROM rfcdsantos/flync:base-envs
 
 COPY . /bin/app
 
-RUN chmod 755 /bin/app/flync
-
-ENV PATH=${PATH}:/bin/app
+# Install the Python package
+RUN cd /bin/app && pip install -e .
 
 WORKDIR /bin/app
 

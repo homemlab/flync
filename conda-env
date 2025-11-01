@@ -1,4 +1,23 @@
 #!/bin/bash
+
+# DEPRECATION NOTICE
+echo ""
+echo "======================================================================"
+echo "  DEPRECATION WARNING"
+echo "======================================================================"
+echo "This script (conda-env) is deprecated and will be removed in a future"
+echo "version. Please use the new installation method instead:"
+echo ""
+echo "  ./install.sh"
+echo ""
+echo "The new method creates a unified conda environment and installs"
+echo "FLYNC as a proper Python package."
+echo "======================================================================"
+echo ""
+echo "Continuing with legacy installation in 5 seconds..."
+echo "Press Ctrl+C to cancel."
+sleep 5
+
 echo "Preparing"
 appdir=$(dirname "$0")
 appdir=$(cd "$appdir" && pwd)
@@ -9,3 +28,7 @@ while read i; do
     conda env create -f $i
 done < envs.txt
 rm envs.txt
+
+echo ""
+echo "Legacy installation complete. Consider migrating to the new method."
+echo "See README.md for details."

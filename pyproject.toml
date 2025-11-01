@@ -49,4 +49,19 @@ Issues = "https://github.com/homemlab/flync/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-flync = ["workflows/*.smk", "workflows/Snakefile"]
+flync = [
+    "workflows/*.smk",
+    "workflows/Snakefile",
+]
+
+# Include additional data files at the package root level
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.exclude-package-data]
+"*" = [
+    "*.pyc",
+    "__pycache__",
+    "*.so",
+    "*.dylib",
+]

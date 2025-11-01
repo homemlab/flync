@@ -1,0 +1,31 @@
+# Include important documentation and configuration files
+include README.md
+include LICENSE
+include pyproject.toml
+include environment.yml
+include install.sh
+
+# Include model files
+recursive-include model *
+
+# Include scripts directory (for backward compatibility)
+recursive-include scripts *.sh *.py *.R
+
+# Include static data files
+recursive-include static *
+
+# Include test data
+recursive-include test *.txt *.yaml *.csv
+
+# Include legacy environment files
+recursive-include env *.yml
+
+# Exclude compiled Python files
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude *.so
+global-exclude *.dylib
+
+# Exclude build artifacts
+global-exclude .DS_Store
+global-exclude *.egg-info
