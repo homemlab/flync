@@ -1,0 +1,109 @@
+"""
+FLYNC Snakemake Workflow
+========================
+
+This Snakefile defines the main workflow for FLYNC pipeline.
+The pipeline consists of 8 main steps:
+
+1. Prepare reference genome files
+2. Gather sample information from SRA database
+3. Map samples to reference genome
+4. Build transcriptomes (assembly)
+5. Calculate coding probability of new transcripts
+6. Differential transcript expression analysis
+7. Extract candidate features from databases
+8. Predict non-coding gene probability using ML
+
+Author: Ricardo F. dos Santos
+"""
+
+import os
+from pathlib import Path
+
+# Configuration
+configfile: "config.yaml"
+
+# Global variables
+WORKDIR = config.get("output", "results")
+APPDIR = Path(workflow.basedir).parent.parent
+THREADS = config.get("threads", 2)
+GENOME_RELEASE = "Ensembl BDGP6.32 release"
+
+# Sample information
+if config.get("fastq_active", False):
+    FASTQ_DIR = config["fastq_path"]
+    PAIRED = config.get("fastq_paired", False)
+else:
+    SRA_LIST = config["sra"]
+
+
+# Rule all - defines final outputs
+rule all:
+    input:
+        f"{WORKDIR}/results/ml-classified-new-non-coding.csv",
+        f"{WORKDIR}/results/all-ml-class-new-non-coding.csv"
+
+
+# Rule: Prepare reference genome
+rule prepare_genome:
+    output:
+        genome = f"{APPDIR}/genome/genome.fa",
+        annotation = f"{APPDIR}/genome/genome.gtf"
+    log:
+        f"{WORKDIR}/logs/prepare_genome.log"
+    conda:
+        "../envs/info.yml"
+    shell:
+        """
+        {APPDIR}/scripts/get-genome.sh {APPDIR} &> {log}
+        """
+
+
+# Rule: Get SRA information
+rule get_sra_info:
+    input:
+        sra_list = SRA_LIST if not config.get("fastq_active", False) else []
+    output:
+        directory(f"{WORKDIR}/results")
+    log:
+        f"{WORKDIR}/logs/get_sra_info.log"
+    conda:
+        "../envs/info.yml"
+    shell:
+        """
+        mkdir -p {output}
+        if [ -n "{input.sra_list}" ]; then
+            {APPDIR}/scripts/get-sra-info.sh {WORKDIR} {input.sra_list} &> {log}
+        fi
+        """
+
+
+# Rule: Build alignment index
+rule build_index:
+    input:
+        genome = rules.prepare_genome.output.genome
+    output:
+        touch(f"{APPDIR}/genome/.index_built")
+    log:
+        f"{WORKDIR}/logs/build_index.log"
+    threads: THREADS
+    conda:
+        "../envs/map.yml"
+    shell:
+        """
+        {APPDIR}/scripts/build-index.sh {APPDIR} {threads} &> {log}
+        """
+
+
+# Additional rules would continue here for:
+# - Mapping (tux2map)
+# - Assembly (tux2assemble, tux2merge, tux2count)
+# - Coding probability (coding-prob)
+# - Classification (class-new-transfrags)
+# - Differential expression (ballgown)
+# - Feature extraction (get-features)
+# - ML prediction (feature-table, predict, final-table)
+
+# Note: This is a simplified scaffold. Full implementation would require
+# converting all shell script steps into Snakemake rules with proper
+# input/output dependencies.

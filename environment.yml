@@ -1,0 +1,63 @@
+name: flync
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # Python and core dependencies
+  - python>=3.8
+  - pip
+  - setuptools
+  - wheel
+  
+  # Core Python packages
+  - pandas>=1.3
+  - numpy>=1.20
+  - scipy>=1.7
+  - scikit-learn>=1.0
+  - pyyaml>=5.4
+  
+  # Bioinformatics tools - mapping
+  - hisat2
+  - samtools
+  - htslib
+  - sra-tools
+  - bowtie2
+  
+  # Bioinformatics tools - assembly
+  - stringtie
+  - gffcompare
+  
+  # Bioinformatics tools - utilities
+  - bedtools
+  - bedops
+  - gffread
+  - ucsc-bigwigaverageoverbed
+  - ucsc-bigbedaverageoverbed
+  
+  # R and packages for differential expression
+  - r-base>=4.0
+  - bioconductor-ballgown
+  - bioconductor-genefilter
+  - bioconductor-deseq2
+  - r-ggplot2
+  - r-dplyr
+  
+  # Other utilities
+  - parallel
+  - wget
+  - curl
+  - entrez-direct
+  - cpat
+  
+  # Snakemake workflow
+  - snakemake>=7.0
+  - click>=8.0
+  
+  # Optional: development tools
+  # - pytest
+  # - black
+  # - flake8
+  
+  - pip:
+    - pickle-mixin>=1.0.2

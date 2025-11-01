@@ -49,12 +49,23 @@ If storage space is not an issue, consider using the Docker image containing the
 docker pull rfcdsantos/flync:local-tracks
 ```
 ### Conda
-You can also clone the repository and install all the required environments to run locally using Anaconda. Just clone the repo and run the script the bash script `conda-env`.
+You can also clone the repository and install the package locally using Anaconda. This will create a unified conda environment and install FLYNC as a Python package.
 
-```
+```bash
 git clone https://github.com/homemlab/flync.git
 cd flync
-./conda-env
+./install.sh
+```
+
+Alternatively, for development installation:
+
+```bash
+# Create and activate the conda environment
+conda env create -f environment.yml
+conda activate flync
+
+# Install the package in editable mode
+pip install -e .
 ```
 ## Usage
 You can see the CLI FLYNC help by running `flync --help` or subcommand specific help with `flync <subcommand> --help`, either with Docker or Conda.
@@ -66,10 +77,21 @@ Example:
 docker run --rm -v $PWD:/data rfcdsantos/flync flync sra -l test/test-list.txt -m test/metadata.csv -o /data/test_run
 ```
 ### Conda
-To use locally with `conda` run `flync` from the cloned directory with the required arguments.  
-Similarly as in with `docker`:
+After installation, activate the environment and use the `flync` command:
+
+```bash
+conda activate flync
+flync --help
 ```
-./flync sra -l test/test-list.txt -m test/metadata.csv -o ./test_run
+
+Run the pipeline with example data:
+```bash
+flync sra -l test/test-list.txt -m test/metadata.csv -o ./test_run
+```
+
+Or using a configuration file:
+```bash
+flync run -c test/config.yaml
 ```
 
 ## Roadmap
@@ -77,3 +99,26 @@ Similarly as in with `docker`:
 - [ ] Feature: Run ML model prediction only by providing a .BED file as input.
 - [ ] Feature: User provided reference genome and annotation.
 - [ ] Fix: Include mean FPKM values per condition present in metadata.csv file.
+
+## Package Structure
+
+FLYNC is organized as a Python package with the following structure:
+
+```
+flync/
+├── src/flync/          # Main package directory
+│   ├── __init__.py     # Package initialization
+│   ├── cli.py          # Command-line interface (Click-based)
+│   ├── ml/             # Machine learning module
+│   │   ├── predict.py
+│   │   ├── feature_table.py
+│   │   └── final_table.py
+│   └── workflows/      # Snakemake workflows
+│       └── Snakefile
+├── scripts/            # Legacy shell and utility scripts
+├── env/                # Legacy individual conda environments
+├── model/              # Pre-trained ML model
+├── pyproject.toml      # Package metadata and dependencies
+├── environment.yml     # Unified conda environment
+└── install.sh          # Installation script
+```
