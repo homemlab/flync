@@ -7,10 +7,8 @@ Python-first CLI for the FLYNC lncRNA discovery pipeline.
 import click
 import subprocess
 import sys
-import os
 from pathlib import Path
-from importlib import resources
-import yaml
+import shutil
 
 try:
     import importlib.resources as pkg_resources
@@ -151,7 +149,12 @@ def main(ctx, version):
     is_flag=True,
     help="Unlock the working directory (useful after a crash)",
 )
-def run_bio(configfile, cores, dry_run, unlock):
+@click.option(
+    "--skip-deps-check",
+    is_flag=True,
+    help="Skip external dependency (binary) availability checks",
+)
+def run_bio(configfile, cores, dry_run, unlock, skip_deps_check):
     """
     Run the bioinformatics transcriptome assembly pipeline.
 
@@ -171,7 +174,8 @@ def run_bio(configfile, cores, dry_run, unlock):
     click.echo(f"  Cores: {cores}")
 
     try:
-        # Find the Snakefile within the package
+        if not skip_deps_check:
+            _check_external_tools(dge_optional=True)
         snakefile_path = pkg_resources.files("flync.workflows").joinpath("Snakefile")
 
         cmd = [
@@ -185,26 +189,20 @@ def run_bio(configfile, cores, dry_run, unlock):
             "--use-conda",
             "--rerun-incomplete",
         ]
-
         if dry_run:
-            cmd.append("--dry-run")
-            cmd.append("--printshellcmds")
-
+            cmd += ["--dry-run", "--printshellcmds"]
         if unlock:
             cmd.append("--unlock")
-
         click.echo(f"Executing: {' '.join(cmd)}")
-        result = subprocess.run(cmd, check=True)
-
+        subprocess.run(cmd, check=True)
         click.secho("✓ Pipeline completed successfully!", fg="green", bold=True)
-
     except subprocess.CalledProcessError as e:
         click.secho(
             f"✗ Pipeline failed with error code {e.returncode}", fg="red", bold=True
         )
         sys.exit(e.returncode)
     except Exception as e:
-        click.secho(f"✗ Error: {str(e)}", fg="red", bold=True)
+        click.secho(f"✗ Error: {e}", fg="red", bold=True)
         sys.exit(1)
 
 
@@ -451,6 +449,8 @@ def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
             click.echo("(Dry run mode - no actual execution)")
 
         try:
+            # Perform external tool checks (ML phase is Python-only)
+            _check_external_tools(dge_optional=True)
             # Find the Snakefile within the package
             snakefile_path = pkg_resources.files("flync.workflows").joinpath(
                 "Snakefile"
@@ -691,7 +691,6 @@ def download_annotation(genome_dir: Path):
     """Download D. melanogaster annotation from Ensembl"""
     url = "https://ftp.ensembl.org/pub/release-106/gtf/drosophila_melanogaster/Drosophila_melanogaster.BDGP6.32.106.chr.gtf.gz"
     output_gz = genome_dir / "genome.gtf.gz"
-    output_gtf = genome_dir / "genome.gtf"
 
     click.echo("  Downloading annotation...")
     subprocess.run(["wget", "-q", url, "-O", str(output_gz)], check=True)
@@ -789,74 +788,60 @@ def config_cmd(template, output, full):
             sys.exit(1)
     else:
         # Generate minimal template with all options commented out
-        minimal_template = """# FLYNC Pipeline Configuration
-# Uncomment and modify the options you need
-
-# ==============================================================================
-# SAMPLE SPECIFICATION (Required - choose one mode)
-# ==============================================================================
-
-# Mode 1: Auto-detect from FASTQ directory (recommended)
-samples: null
-fastq_dir: "/path/to/fastq"
-fastq_paired: false  # true for paired-end, false for single-end
-
-# Mode 2: Plain text sample list
-# samples: "samples.txt"
-# fastq_dir: "/path/to/fastq"
-
-# Mode 3: CSV metadata (required for DGE - MUST have header row)
-# samples: "metadata.csv"  # Must have headers: sample_id,condition
-# fastq_dir: "/path/to/fastq"
-
-# ==============================================================================
-# REFERENCE GENOME (Required)
-# ==============================================================================
-
-genome: "genome/genome.fa"
-annotation: "genome/genome.gtf"
-hisat_index: "genome/genome.idx"
-# splice_sites: "genome/genome.ss"  # Optional, auto-generated
-
-# ==============================================================================
-# OUTPUT AND RESOURCES (Required)
-# ==============================================================================
-
-output_dir: "results"
-threads: 8
-
-# ==============================================================================
-# TOOL PARAMETERS (Optional)
-# ==============================================================================
-
-# params:
-#   hisat2: "-p 8 --dta --dta-cufflinks"
-#   stringtie_assemble: "-p 8"
-#   stringtie_merge: ""
-#   stringtie_quantify: "-eB"
-#   download_threads: 4
-
-# ==============================================================================
-# MACHINE LEARNING (Required for 'flync run-all')
-# ==============================================================================
-
-ml_reference_genome: "genome/genome.fa"
-ml_output_file: "results/lncrna_predictions.csv"
-
-# Optional ML parameters
-# ml_bwq_config: "config/bwq_config.yaml"
-# ml_model: "path/to/custom_model.pkl"
-# ml_cache_dir: "/path/to/cache"
-# ml_gtf: "results/assemblies/merged-new-transcripts.gtf"
-# ml_threads: 8
-
-# ==============================================================================
-# NOTES
-# ==============================================================================
-
-# For full documentation, see: flync config --template --full
-# Or visit: https://github.com/homemlab/flync
-"""
+        minimal_template = (
+            "# FLYNC Pipeline Configuration\n"
+            "# Uncomment and modify the options you need\n\n"
+            "# ==============================================================================\n"
+            "# SAMPLE SPECIFICATION (Required - choose one mode)\n"
+            "# ==============================================================================\n\n"
+            "# Mode 1: Auto-detect from FASTQ directory (recommended)\n"
+            "samples: null\n"
+            'fastq_dir: "/path/to/fastq"\n'
+            "fastq_paired: false  # true for paired-end, false for single-end\n\n"
+            "# Mode 2: Plain text sample list\n"
+            '# samples: "samples.txt"\n'
+            '# fastq_dir: "/path/to/fastq"\n\n'
+            "# Mode 3: CSV metadata (required for DGE - MUST have header row)\n"
+            '# samples: "metadata.csv"  # Must have headers: sample_id,condition\n'
+            '# fastq_dir: "/path/to/fastq"\n\n'
+            "# ==============================================================================\n"
+            "# REFERENCE GENOME (Required)\n"
+            "# ==============================================================================\n\n"
+            'genome: "genome/genome.fa"\n'
+            'annotation: "genome/genome.gtf"\n'
+            'hisat_index: "genome/genome.idx"\n'
+            '# splice_sites: "genome/genome.ss"  # Optional, auto-generated\n\n'
+            "# ==============================================================================\n"
+            "# OUTPUT AND RESOURCES (Required)\n"
+            "# ==============================================================================\n\n"
+            'output_dir: "results"\n'
+            "threads: 8\n\n"
+            "# ==============================================================================\n"
+            "# TOOL PARAMETERS (Optional)\n"
+            "# ==============================================================================\n\n"
+            "# params:\n"
+            '#   hisat2: "-p 8 --dta --dta-cufflinks"\n'
+            '#   stringtie_assemble: "-p 8"\n'
+            '#   stringtie_merge: ""\n'
+            '#   stringtie_quantify: "-eB"\n'
+            "#   download_threads: 4\n\n"
+            "# ==============================================================================\n"
+            "# MACHINE LEARNING (Required for 'flync run-all')\n"
+            "# ==============================================================================\n\n"
+            'ml_reference_genome: "genome/genome.fa"\n'
+            'ml_output_file: "results/lncrna_predictions.csv"\n\n'
+            "# Optional ML parameters\n"
+            '# ml_bwq_config: "config/bwq_config.yaml"\n'
+            '# ml_model: "path/to/custom_model.pkl"\n'
+            '# ml_cache_dir: "/path/to/cache"\n'
+            '# ml_gtf: "results/assemblies/merged-new-transcripts.gtf"\n'
+            "# ml_threads: 8\n\n"
+            "# ==============================================================================\n"
+            "# NOTES\n"
+            "# ==============================================================================\n\n"
+            "# For full documentation, see: flync config --template --full\n"
+            "# Or visit: https://github.com/homemlab/flync\n"
+        )
 
         with open(output_path, "w") as f:
             f.write(minimal_template)
@@ -864,12 +849,76 @@ ml_output_file: "results/lncrna_predictions.csv"
         click.secho(
             f"✓ Minimal configuration template written to: {output_path}", fg="green"
         )
-        click.echo(f"\nNext steps:")
+        click.echo("\nNext steps:")
         click.echo(f"  1. Edit {output_path} with your paths and settings")
         click.echo(f"  2. Run: flync run-all --configfile {output_path}")
-        click.echo(f"\nFor full example with all options:")
-        click.echo(f"  flync config --template --full -o config_full.yaml")
+        click.echo("\nFor full example with all options:")
+        click.echo("  flync config --template --full -o config_full.yaml")
 
 
 if __name__ == "__main__":
     main()
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+REQUIRED_BINARIES = [
+    ("hisat2", "HISAT2 aligner"),
+    ("stringtie", "StringTie assembler"),
+    ("gffcompare", "gffcompare comparator"),
+    ("samtools", "samtools (BAM processing)"),
+    ("bedtools", "bedtools (interval operations)"),
+    ("prefetch", "SRA-tools prefetch (NCBI download)"),
+    ("fasterq-dump", "SRA-tools fasterq-dump (FASTQ conversion)"),
+]
+
+OPTIONAL_DGE_BINARIES = [
+    ("Rscript", "Rscript (required for Ballgown DGE)"),
+]
+
+
+def _check_external_tools(dge_optional: bool = True) -> None:
+    """Check availability of external command-line tools.
+
+    Parameters
+    ----------
+    dge_optional : bool
+        If True, DGE-related tools are reported as optional warnings instead of errors.
+    """
+    missing = []
+    for binary, desc in REQUIRED_BINARIES:
+        if shutil.which(binary) is None:
+            missing.append((binary, desc))
+
+    if missing:
+        click.secho("✗ Missing required external tools:", fg="red", bold=True)
+        for b, d in missing:
+            click.echo(f"  - {b}: {d}")
+        click.echo(
+            "\nInstall via Conda (recommended):\n  conda create -n flync -c bioconda -c conda-forge flync"
+        )
+        click.echo(
+            "If you installed via pip, external bioinformatics binaries are NOT auto-installed."
+        )
+        click.echo("You can skip this check with --skip-deps-check (not recommended).")
+        sys.exit(1)
+
+    # DGE optional warnings
+    dge_missing = []
+    for binary, desc in OPTIONAL_DGE_BINARIES:
+        if shutil.which(binary) is None:
+            dge_missing.append((binary, desc))
+    if dge_missing:
+        click.secho(
+            "⚠ Differential expression (DGE) support not fully available (missing tools):",
+            fg="yellow",
+        )
+        for b, d in dge_missing:
+            click.echo(f"  - {b}: {d}")
+        click.echo(
+            "Install add-on package (Conda):\n  conda install -n flync flync-dge  # after adding bioconda channel"
+        )
+        click.echo(
+            "Or create environment initially with: conda create -n flync -c bioconda -c conda-forge flync flync-dge"
+        )

@@ -1,0 +1,41 @@
+{% set name = "flync-dge" %}
+{% set version = environ.get('FLYNC_BUILD_VERSION', '1.0.1') %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv
+
+requirements:
+  host:
+    - python >=3.11
+    - pip
+    - setuptools
+  run:
+    - python >=3.11
+    - flync =={{ version }}
+    # R / DGE stack
+    - r-base >=4.2.0
+    - bioconductor-ballgown >=2.38
+    - r-matrixstats >=0.63.0
+    - r-ggplot2 >=3.4.0
+
+about:
+  home: https://github.com/homemlab/flync
+  license: MIT
+  summary: 'FLYNC DGE add-on (R Ballgown stack)'
+  description: |
+    Optional differential expression (DGE) layer for FLYNC providing the R / Ballgown
+    dependencies. Install this package in addition to the base flync package when
+    you need transcript/gene-level differential expression analysis.
+
+extra:
+  recipe-maintainers:
+    - homemlab

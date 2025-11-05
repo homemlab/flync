@@ -1,5 +1,6 @@
 {% set name = "flync" %}
-{% set version = "1.0.1" %}
+{# Use environment-provided version if available (injected by CI), fallback to explicit value #}
+{% set version = environ.get('FLYNC_BUILD_VERSION', '1.0.1') %}
 
 package:
   name: {{ name|lower }}
@@ -33,11 +34,6 @@ requirements:
     - pybigwig >=0.3.22
     - pybedtools >=0.9.1
     - snakemake-minimal >=7.32.0
-    # R and Ballgown for DGE
-    - r-base >=4.2.0
-    - bioconductor-ballgown >=2.38
-    - r-matrixstats >=0.63.0
-    - r-ggplot2 >=3.4.0
     # Build tools
     - git >=2.40.0
     # Python dependencies

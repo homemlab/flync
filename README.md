@@ -88,14 +88,19 @@ Full detailed documentation continues below.
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Usage Guide](#usage-guide)
+  - [1. Setup Reference Genome](#1-setup-reference-genome)
+  - [2. Configure Pipeline](#2-configure-pipeline)
+  - [Sample Specification (3 Modes)](#sample-specification-3-modes)
+  - [3. Run Bioinformatics Pipeline](#3-run-bioinformatics-pipeline)
+  - [4. Run ML Prediction](#4-run-ml-prediction)
+  - [5. Run Complete Pipeline (Recommended)](#5-run-complete-pipeline-recommended)
+  - [6. Differential Gene Expression (DGE)](#6-differential-gene-expression-dge)
+  - [7. Python API Usage](#7-python-api-usage)
 - [Pipeline Architecture](#pipeline-architecture)
-- [Feature Extraction](#feature-extraction)
 - [Advanced Usage](#advanced-usage)
 - [Troubleshooting](#troubleshooting)
-- [Project Structure](#project-structure)
-- [Migration from Legacy Version](#migration-from-legacy-version)
 - [Contributing](#contributing)
-- [Citation](#citation)
+- [License](#license)
 
 ---
 
@@ -142,6 +147,100 @@ Run the entire workflow end-to-end with a single command
 
 ## Installation
 
+### Overview
+
+Choose an installation method based on what you need:
+
+| Use Case | Recommended Method | Command |
+|----------|-------------------|---------|
+| Full pipeline (alignment + assembly + ML) | Conda (base) | `conda create -n flync -c bioconda -c conda-forge flync` |
+| Add differential expression (Ballgown) | Conda add-on | `conda install -n flync flync-dge` |
+| ML / feature extraction only (no aligners) | pip + extras | `pip install flync[features,ml]` |
+| Programmatic Snakemake orchestration (no bio tools) | pip minimal + workflow | `pip install flync[workflow]` |
+| Reproducible container execution | Docker (runtime) | `docker pull ghcr.io/homemlab/flync:latest` |
+| Faster startup with pre-cached tracks | Docker (prewarmed) | `docker pull ghcr.io/homemlab/flync:latest-prewarmed` |
+
+### Option 1: Conda (Recommended – Full Stack)
+
+```bash
+conda create -n flync -c bioconda -c conda-forge flync
+conda activate flync
+flync --help
+```
+
+Add DGE support (Ballgown + R stack):
+```bash
+conda install -n flync flync-dge  # after base install
+```
+
+Or install both at once:
+```bash
+conda create -n flync -c bioconda -c conda-forge flync flync-dge
+```
+
+### Option 2: pip (Python-Only / Lightweight)
+
+Pip will NOT install external bioinformatics binaries (HISAT2, StringTie, samtools, etc.). Use this only for feature extraction or ML inference on an existing GTF.
+
+```bash
+python -m venv flync-venv
+source flync-venv/bin/activate
+pip install --upgrade pip
+
+# Feature extraction + ML
+pip install "flync[features,ml]"
+
+# Add Snakemake lightweight orchestration (still no external binaries)
+pip install "flync[workflow]"
+
+flync run-ml --help
+```
+
+If you attempt `flync run-bio` without the required external tools, FLYNC will explain what is missing and how to install via conda.
+
+### Option 3: Docker
+
+Runtime image (downloads tracks on demand):
+```bash
+docker pull ghcr.io/homemlab/flync:latest
+docker run --rm -v $PWD:/work ghcr.io/homemlab/flync:latest \
+  flync --help
+```
+
+Prewarmed image (tracks pre-cached):
+```bash
+docker pull ghcr.io/homemlab/flync:latest-prewarmed
+```
+
+### Which Should I Pick?
+
+| Scenario | Choose |
+|----------|-------|
+| New user, want everything | Conda base (add `flync-dge` if doing DGE) |
+| HPC / cluster with module rules | Conda (export env YAML for reproducibility) |
+| Notebook exploratory ML only | pip extras (`features,ml`) |
+| CI / workflow integration | Docker runtime image |
+| Need fastest repeated ML runs | Docker prewarmed image |
+
+### External Tool Summary
+
+The following are ONLY installed automatically via the Conda packages (`flync`, `flync-dge`):
+```
+hisat2, stringtie, gffcompare, gffread, samtools, bedtools, sra-tools,
+R (r-base), bioconductor-ballgown, r-matrixstats, r-ggplot2
+```
+Pip installations will perform a dependency sanity check and abort `run-bio` if these are missing (unless `--skip-deps-check` is used).
+
+### Development Install (Editable)
+
+```bash
+git clone https://github.com/homemlab/flync.git
+cd flync
+conda env create -f environment.yml
+conda activate flync
+pip install -e .
+```
+
 ### Prerequisites
 
 - **Operating System**: Linux (tested on Debian/Ubuntu)
@@ -151,25 +250,7 @@ Run the entire workflow end-to-end with a single command
   - 20+ GB disk space (genome, indices, and tracks)
   - 4+ CPU cores (8+ recommended)
 
-### Install from Conda (Recommended)
-
-```bash
-# Create and activate environment with FLYNC
-conda create -n flync -c bioconda -c conda-forge flync
-conda activate flync
-
-# Verify installation
-flync --help
-```
-
-**What gets installed:**
-- **Python 3.11** with all dependencies
-- **Bioinformatics tools**: HISAT2, StringTie, gffcompare, samtools, bedtools, SRA-tools
-- **R and Ballgown**: For differential gene expression analysis
-- **Python packages**: pandas, scikit-learn, pyBigWig, gffutils, pyfaidx, snakemake, etc.
-- **ML frameworks**: interpret (for EBM), optuna, mlflow (for training)
-
-### Install from Source (Development)
+### Install from Source (Full + Editable)
 
 For development or if you need the latest unreleased features:
 
@@ -192,47 +273,7 @@ pip install -e .
 flync --help
 ```
 
-### Docker
-
-Two pre-built Docker images are available:
-
-#### Standard Runtime Image
-Downloads genomic tracks at runtime (smaller image size):
-
-```bash
-# Build from source
-docker build -t flync:runtime .
-
-# Or pull from registry (when available)
-docker pull homemlab/flync:runtime
-
-# Run pipeline with mounted data
-docker run --rm -v $PWD:/data -v $PWD/results:/results flync:runtime \
-  flync run-all --configfile /data/config.yaml --cores 8
-```
-
-#### Pre-warmed Image
-Includes pre-downloaded genomic tracks for faster startup (larger image, ~3-5GB more):
-
-```bash
-# Build with custom BWQ config
-docker build -t flync:prewarmed --target flync-prewarmed \
-  --build-arg BWQ_CONFIG=config/bwq_config.yaml .
-
-# Or pull from registry (when available)
-docker pull homemlab/flync:prewarmed
-
-# Run pipeline (tracks already cached)
-docker run --rm -v $PWD:/data -v $PWD/results:/results flync:prewarmed \
-  flync run-ml --gtf /data/merged.gtf --output /results/predictions.csv \
-    --ref-genome /data/genome.fa
-```
-
-**Docker Benefits:**
-- Complete isolated environment
-- No local conda installation needed
-- Reproducible across systems
-- Volume mounts for data and results
+Docker image details moved above for quick discovery.
 
 ---
 

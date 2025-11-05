@@ -19,11 +19,10 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.11']
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3
         with:
@@ -32,7 +31,7 @@ jobs:
           miniforge-version: latest
           channels: conda-forge,bioconda,defaults
           channel-priority: strict
-      
+
       - name: Create conda environment
         shell: bash -l {0}
         run: |
@@ -89,19 +88,70 @@ jobs:
         shell: bash -l {0}
         run: |
           conda install -y conda-build anaconda-client
-      
+      - name: Inject tag version into environment
+        shell: bash -l {0}
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}" || exit 1
+          echo "FLYNC_BUILD_VERSION=${TAG_VERSION}" >> $GITHUB_ENV
+          echo "Resolved tag version: ${TAG_VERSION}"
+
       - name: Build conda package
         shell: bash -l {0}
         run: |
+          EXPECTED_PATH=$(conda build conda-recipe --output)
+          echo "Expected artifact path: ${EXPECTED_PATH}"
           conda build conda-recipe --output-folder conda-bld/
-      
+          if [ ! -f "${EXPECTED_PATH}" ]; then
+            echo "Conda build completed but artifact not found at expected path." >&2
+            echo "Listing conda-bld directory for diagnostics:" >&2
+            find conda-bld -maxdepth 3 -type f -name '*.tar.bz2' -print || true
+            exit 1
+          fi
+          echo "Artifact verified at ${EXPECTED_PATH}"
+          # Build DGE add-on package
+          EXPECTED_DGE_PATH=$(conda build conda-recipe-dge --output)
+          echo "Expected DGE artifact path: ${EXPECTED_DGE_PATH}"
+          conda build conda-recipe-dge --output-folder conda-bld/
+          if [ ! -f "${EXPECTED_DGE_PATH}" ]; then
+            echo "DGE build completed but artifact not found at expected path." >&2
+            find conda-bld -maxdepth 3 -type f -name '*.tar.bz2' -print || true
+            exit 1
+          fi
+          echo "DGE artifact verified at ${EXPECTED_DGE_PATH}"
+
       - name: Upload conda package
         shell: bash -l {0}
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
         run: |
-          anaconda upload --skip-existing conda-bld/noarch/*.tar.bz2
+          PACKAGE_PATH=$(conda build conda-recipe --output)
+          echo "Uploading artifact: ${PACKAGE_PATH}" || exit 1
+          anaconda upload --skip-existing "${PACKAGE_PATH}" || {
+            echo "Primary upload failed; attempting fallback search." >&2
+            FALLBACK=$(find conda-bld -maxdepth 3 -type f -name '*.tar.bz2' | head -n1 || true)
+            if [ -n "${FALLBACK}" ]; then
+              echo "Retrying with fallback artifact: ${FALLBACK}" >&2
+              anaconda upload --skip-existing "${FALLBACK}" || exit 1
+            else
+              echo "No artifact found for upload." >&2
+              exit 1
+            fi
+          }
+          # Upload DGE add-on
+          DGE_PACKAGE_PATH=$(conda build conda-recipe-dge --output)
+          echo "Uploading DGE artifact: ${DGE_PACKAGE_PATH}" || exit 1
+            anaconda upload --skip-existing "${DGE_PACKAGE_PATH}" || {
+              echo "Primary DGE upload failed; attempting fallback search." >&2
+              FALLBACK_DGE=$(find conda-bld -maxdepth 3 -type f -name 'flync-dge*.tar.bz2' | head -n1 || true)
+              if [ -n "${FALLBACK_DGE}" ]; then
+                echo "Retrying with fallback DGE artifact: ${FALLBACK_DGE}" >&2
+                anaconda upload --skip-existing "${FALLBACK_DGE}" || exit 1
+              else
+                echo "No DGE artifact found for upload." >&2
+                exit 1
+              fi
+            }
 
   # ===========================================================================
   # Build and Push Docker Images
