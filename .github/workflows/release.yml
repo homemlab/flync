@@ -1,0 +1,314 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Trigger on version tags (e.g., v1.0.0)
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # Build and Test Python Package
+  # ===========================================================================
+  test-python:
+    name: Test Python Package
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+          miniforge-version: latest
+          channels: conda-forge,bioconda,defaults
+          channel-priority: strict
+      
+      - name: Create conda environment
+        shell: bash -l {0}
+        run: |
+          conda env create -f environment.yml
+      
+      - name: Install package
+        shell: bash -l {0}
+        run: |
+          conda activate flync
+          pip install -e .
+      
+      - name: Test CLI
+        shell: bash -l {0}
+        run: |
+          conda activate flync
+          flync --help
+          flync --version
+          flync config --template --output test_config.yaml
+      
+      - name: Lint with flake8 (optional)
+        shell: bash -l {0}
+        run: |
+          conda activate flync
+          pip install flake8
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 src/flync --count --select=E9,F63,F7,F82 --show-source --statistics || true
+          # Exit-zero treats all errors as warnings
+          flake8 src/flync --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || true
+
+  # ===========================================================================
+  # Build Conda Package
+  # ===========================================================================
+  build-conda:
+    name: Build Conda Package
+    runs-on: ubuntu-latest
+    needs: test-python
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: '3.11'
+          miniforge-version: latest
+          channels: conda-forge,bioconda,defaults
+          channel-priority: strict
+      
+      - name: Install conda-build
+        shell: bash -l {0}
+        run: |
+          conda install -y conda-build anaconda-client
+      
+      - name: Build conda package
+        shell: bash -l {0}
+        run: |
+          conda build conda-recipe --output-folder conda-bld/
+      
+      - name: Upload conda package
+        shell: bash -l {0}
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+        run: |
+          anaconda upload --skip-existing conda-bld/noarch/*.tar.bz2
+
+  # ===========================================================================
+  # Build and Push Docker Images
+  # ===========================================================================
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test-python
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata for runtime image
+        id: meta-runtime
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=runtime
+      
+      - name: Build and push runtime image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: flync-runtime
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-runtime.outputs.tags }}
+          labels: ${{ steps.meta-runtime.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Extract metadata for prewarmed image
+        id: meta-prewarmed
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch,suffix=-prewarmed
+            type=ref,event=pr,suffix=-prewarmed
+            type=semver,pattern={{version}},suffix=-prewarmed
+            type=semver,pattern={{major}}.{{minor}},suffix=-prewarmed
+            type=semver,pattern={{major}},suffix=-prewarmed
+            type=raw,value=prewarmed
+      
+      - name: Build and push prewarmed image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: flync-prewarmed
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-prewarmed.outputs.tags }}
+          labels: ${{ steps.meta-prewarmed.outputs.labels }}
+          build-args: |
+            BWQ_CONFIG=src/flync/config/bwq_config.yaml
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================================================
+  # Create GitHub Release
+  # ===========================================================================
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-conda, build-docker]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Get all tags and history
+      
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            # First release
+            CHANGELOG="Initial release of FLYNC v${{ steps.get_version.outputs.VERSION }}"
+          else
+            # Generate changelog from commits
+            CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+          fi
+          
+          # Save to file
+          cat > CHANGELOG.md << EOF
+          # FLYNC v${{ steps.get_version.outputs.VERSION }}
+          
+          ## What's Changed
+          
+          ${CHANGELOG}
+          
+          ## Installation
+          
+          ### Conda (Recommended)
+          \`\`\`bash
+          conda create -n flync -c bioconda -c conda-forge flync=${{ steps.get_version.outputs.VERSION }}
+          conda activate flync
+          flync --help
+          \`\`\`
+          
+          ### Docker
+          \`\`\`bash
+          # Runtime image (downloads tracks at runtime)
+          docker pull ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.VERSION }}
+          
+          # Prewarmed image (tracks pre-cached, larger size)
+          docker pull ghcr.io/${{ github.repository }}:${{ steps.get_version.outputs.VERSION }}-prewarmed
+          \`\`\`
+          
+          ### From Source
+          \`\`\`bash
+          git clone https://github.com/${{ github.repository }}.git
+          cd flync
+          git checkout v${{ steps.get_version.outputs.VERSION }}
+          conda env create -f environment.yml
+          conda activate flync
+          pip install -e .
+          \`\`\`
+          
+          ## Documentation
+          
+          See [README.md](https://github.com/${{ github.repository }}/blob/master/README.md) for full documentation.
+          EOF
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            LICENSE
+            README.md
+            environment.yml
+            config_example_full.yaml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===========================================================================
+  # Publish to PyPI (Optional - for pip install)
+  # ===========================================================================
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: test-python
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      
+      - name: Build package
+        run: python -m build
+      
+      - name: Check package
+        run: twine check dist/*
+      
+      - name: Publish to PyPI
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*

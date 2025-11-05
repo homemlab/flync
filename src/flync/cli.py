@@ -709,41 +709,132 @@ def build_hisat2_index(genome_dir: Path):
 @click.option(
     "--output",
     "-o",
-    default="config/config.yaml",
+    default="config.yaml",
     type=click.Path(),
     help="Output path for configuration file",
 )
-def config_cmd(template, output):
+@click.option(
+    "--full",
+    "-f",
+    is_flag=True,
+    help="Generate full example with all options and documentation",
+)
+def config_cmd(template, output, full):
     """
-    Generate or validate pipeline configuration files.
-    """
-    if template:
-        output_path = Path(output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+    Generate pipeline configuration files.
 
-        template_config = {
-            "samples": "metadata.csv",
-            "genome": "genome/genome.fa",
-            "annotation": "genome/genome.gtf",
-            "hisat_index": "genome/genome.idx",
-            "splice_sites": "genome/genome.ss",
-            "output_dir": "results",
-            "threads": 8,
-            "params": {
-                "hisat2": "-p 8 --dta --dta-cufflinks",
-                "stringtie_assemble": "-p 8",
-                "stringtie_merge": "",
-                "stringtie_quantify": "-eB",
-                "download_threads": 4,
-            },
-        }
+    By default, creates a minimal template with all options commented out.
+    Use --full to generate a comprehensive example with documentation.
+    """
+    if not template:
+        click.echo("Use --template to generate a configuration file")
+        click.echo("  flync config --template               # Minimal template")
+        click.echo("  flync config --template --full        # Full example with docs")
+        return
+
+    output_path = Path(output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if full:
+        # Copy the full example file
+        import shutil
+        import flync
+
+        flync_dir = Path(flync.__file__).parent
+        full_example = flync_dir.parent.parent / "config_example_full.yaml"
+
+        if full_example.exists():
+            shutil.copy(full_example, output_path)
+            click.secho(
+                f"✓ Full configuration example written to: {output_path}", fg="green"
+            )
+        else:
+            click.secho(
+                f"✗ Full example template not found at {full_example}", fg="red"
+            )
+            sys.exit(1)
+    else:
+        # Generate minimal template with all options commented out
+        minimal_template = """# FLYNC Pipeline Configuration
+# Uncomment and modify the options you need
+
+# ==============================================================================
+# SAMPLE SPECIFICATION (Required - choose one mode)
+# ==============================================================================
+
+# Mode 1: Auto-detect from FASTQ directory (recommended)
+samples: null
+fastq_dir: "/path/to/fastq"
+fastq_paired: false  # true for paired-end, false for single-end
+
+# Mode 2: Plain text sample list
+# samples: "samples.txt"
+# fastq_dir: "/path/to/fastq"
+
+# Mode 3: CSV metadata (required for DGE - MUST have header row)
+# samples: "metadata.csv"  # Must have headers: sample_id,condition
+# fastq_dir: "/path/to/fastq"
+
+# ==============================================================================
+# REFERENCE GENOME (Required)
+# ==============================================================================
+
+genome: "genome/genome.fa"
+annotation: "genome/genome.gtf"
+hisat_index: "genome/genome.idx"
+# splice_sites: "genome/genome.ss"  # Optional, auto-generated
+
+# ==============================================================================
+# OUTPUT AND RESOURCES (Required)
+# ==============================================================================
+
+output_dir: "results"
+threads: 8
+
+# ==============================================================================
+# TOOL PARAMETERS (Optional)
+# ==============================================================================
+
+# params:
+#   hisat2: "-p 8 --dta --dta-cufflinks"
+#   stringtie_assemble: "-p 8"
+#   stringtie_merge: ""
+#   stringtie_quantify: "-eB"
+#   download_threads: 4
+
+# ==============================================================================
+# MACHINE LEARNING (Required for 'flync run-all')
+# ==============================================================================
+
+ml_reference_genome: "genome/genome.fa"
+ml_output_file: "results/lncrna_predictions.csv"
+
+# Optional ML parameters
+# ml_bwq_config: "config/bwq_config.yaml"
+# ml_model: "path/to/custom_model.pkl"
+# ml_cache_dir: "/path/to/cache"
+# ml_gtf: "results/assemblies/merged-new-transcripts.gtf"
+# ml_threads: 8
+
+# ==============================================================================
+# NOTES
+# ==============================================================================
+
+# For full documentation, see: flync config --template --full
+# Or visit: https://github.com/homemlab/flync
+"""
 
         with open(output_path, "w") as f:
-            yaml.dump(template_config, f, default_flow_style=False, sort_keys=False)
+            f.write(minimal_template)
 
-        click.secho(f"✓ Template configuration written to: {output_path}", fg="green")
-    else:
-        click.echo("Use --template to generate a configuration file")
+        click.secho(
+            f"✓ Minimal configuration template written to: {output_path}", fg="green"
+        )
+        click.echo(f"\nNext steps:")
+        click.echo(f"  1. Edit {output_path} with your paths and settings")
+        click.echo(f"  2. Run: flync run-all --configfile {output_path}")
+        click.echo(f"\nFor full example with all options:")
+        click.echo(f"  flync config --template --full -o config_full.yaml")
 
 
 if __name__ == "__main__":

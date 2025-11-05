@@ -5,7 +5,7 @@
 FLYNC is a complete bioinformatics pipeline for discovering and classifying long non-coding RNAs (lncRNAs) in *Drosophila melanogaster*. It combines RNA-seq processing, comprehensive genomic feature extraction, and machine learning classification to identify novel lncRNA candidates.
 
 **Version**: 1.0.0 (Python-first architecture)  
-**Branch**: v2 (production-ready)  
+**Branch**: master (production-ready)  
 **Last Updated**: November 2025
 
 ---
@@ -22,7 +22,7 @@ FLYNC is a complete bioinformatics pipeline for discovering and classifying long
 - [Advanced Usage](#advanced-usage)
 - [Troubleshooting](#troubleshooting)
 - [Project Structure](#project-structure)
-- [Migration from v1](#migration-from-v1)
+- [Migration from Legacy Version](#migration-from-legacy-version)
 - [Contributing](#contributing)
 - [Citation](#citation)
 
@@ -92,24 +92,14 @@ Run only the machine learning classification:
   - 20+ GB disk space (genome, indices, and tracks)
   - 4+ CPU cores (8+ recommended)
 
-### Install from Source
+### Install from Conda (Recommended)
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/homemlab/flync.git
-cd flync
-git checkout v2  # Use the v2 branch (production)
-
-# 2. Create conda environment with all dependencies
-conda env create -f environment.yml
-
-# 3. Activate environment
+# Create and activate environment with FLYNC
+conda create -n flync -c bioconda -c conda-forge flync
 conda activate flync
 
-# 4. Install Python package
-pip install -e .
-
-# 5. Verify installation
+# Verify installation
 flync --help
 ```
 
@@ -120,7 +110,28 @@ flync --help
 - **Python packages**: pandas, scikit-learn, pyBigWig, gffutils, pyfaidx, snakemake, etc.
 - **ML frameworks**: interpret (for EBM), optuna, mlflow (for training)
 
-**Note**: All dependencies are now managed in a single `environment.yml` file for simplified installation.
+### Install from Source (Development)
+
+For development or if you need the latest unreleased features:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/homemlab/flync.git
+cd flync
+git checkout master  # Use the master branch (production)
+
+# 2. Create conda environment with dependencies
+conda env create -f environment.yml
+
+# 3. Activate environment
+conda activate flync
+
+# 4. Install package in development mode
+pip install -e .
+
+# 5. Verify installation
+flync --help
+```
 
 ### Docker
 
@@ -177,29 +188,26 @@ conda activate flync
 # 2. Download genome and build indices
 flync setup --genome-dir genome
 
-# 3. Create unified configuration file
-cat > config.yaml << EOF
-samples: metadata.csv
-genome: genome/genome.fa
-annotation: genome/genome.gtf
-hisat_index: genome/genome.idx
-output_dir: results
-threads: 8
-# ML configuration
-ml_reference_genome: genome/genome.fa
-ml_output_file: results/lncrna_predictions.csv
-EOF
+# 3. Create configuration file
+flync config --template --output config.yaml
 
-# 4. Create metadata.csv with sample information
+# 4. Edit config.yaml with your paths and settings
+# See config_example_full.yaml for all available options
+
+# 5. Create metadata.csv with sample information (MUST have header row!)
 cat > metadata.csv << EOF
-sample_id,condition
-SRR123456,control
-SRR123457,control
-SRR123458,treatment
-SRR123459,treatment
+sample_id,condition,replicate
+SRR123456,control,1
+SRR123457,control,2
+SRR123458,treatment,1
+SRR123459,treatment,2
 EOF
 
-# 5. Run complete pipeline (bioinformatics + ML + DGE)
+# 6. Update config.yaml to use metadata.csv
+# Change: samples: null
+# To:     samples: metadata.csv
+
+# 7. Run complete pipeline (bioinformatics + ML + DGE)
 flync run-all --configfile config.yaml --cores 8
 ```
 
@@ -341,6 +349,8 @@ sample1,control,1
 sample2,control,2
 sample3,treated,1
 ```
+
+**⚠️ Important:** When using CSV metadata, the header row with column names (`sample_id`, `condition`) is **required**. Without headers, the DGE analysis will fail. The `sample_id` column is mandatory for sample identification, and the `condition` column is required to enable differential expression analysis.
 
 ### 3. Run Bioinformatics Pipeline
 
@@ -511,7 +521,9 @@ Run DGE analysis using Ballgown when metadata with conditions is provided:
 
 **Requirements:**
 - `samples` config key points to a CSV file (not TXT)
-- CSV must contain `condition` column for grouping samples
+- CSV **must have a header row** with column names
+- CSV **must contain** `sample_id` column (for sample identification)
+- CSV **must contain** `condition` column (for grouping samples in DGE)
 
 **Example metadata.csv:**
 ```csv
@@ -521,6 +533,8 @@ SRR123457,control,2
 SRR123458,treatment,1
 SRR123459,treatment,2
 ```
+
+**⚠️ Critical:** The header row is **not optional**. If you omit it or have a headerless CSV, the DGE analysis will fail with an error about missing the `sample_id` column.
 
 **DGE runs automatically** when using `flync run-bio` or `flync run-all` with metadata CSV.
 
@@ -1062,8 +1076,15 @@ flync/
 ├── README.md                  # This file
 ├── environment.yml            # Conda environment specification
 ├── pyproject.toml            # Python package metadata
-├── Dockerfile                # Docker image definition
-├── config.yaml               # Pipeline configuration (generated)
+├── Dockerfile                # Multi-stage Docker build (runtime + prewarmed)
+├── config.yaml               # Pipeline configuration (generated by user)
+├── config_example_full.yaml  # Complete example with all options documented
+│
+├── .github/workflows/        # CI/CD automation
+│   └── release.yml           # Build, test, and release workflow
+│
+├── conda-recipe/             # Conda package recipe
+│   └── meta.yaml             # Conda build configuration
 │
 ├── src/flync/                # Main Python package
 │   ├── __init__.py
@@ -1155,9 +1176,9 @@ The following are not part of the active pipeline:
 
 ---
 
-## Migration from v1
+## Migration from Legacy Version
 
-If upgrading from the bash-based v1 pipeline:
+If upgrading from the bash-based legacy pipeline:
 
 ### Major Changes
 
@@ -1169,8 +1190,8 @@ If upgrading from the bash-based v1 pipeline:
 
 ### Command Mapping
 
-| v1 Command | v2 Command |
-|------------|------------|
+| Legacy Command | Current Command |
+|----------------|-----------------|
 | `./flync sra <accessions>` | `flync run-bio -c config.yaml` |
 | `./get-genome.sh` | `flync setup --genome-dir genome` |
 | `./tux2map.sh` | `flync run-bio -c config.yaml` |
@@ -1181,17 +1202,17 @@ If upgrading from the bash-based v1 pipeline:
 
 1. **Backup old installation:**
    ```bash
-   # Move v1 scripts to backup folder (already done if you see deprecated_v1_*)
+   # Move legacy scripts to backup folder (already done if you see deprecated_v1_*)
    ```
 
 2. **Remove old environments:**
    ```bash
-   # v1 used multiple environments in env/
+   # legacy version used multiple environments in env/
    rm -rf env/
    conda env remove -n flync_old  # If you had custom env names
    ```
 
-3. **Install v2:**
+3. **Install current version:**
    ```bash
    conda env create -f environment.yml
    conda activate flync
@@ -1223,12 +1244,17 @@ Contributions are welcome! Please follow these guidelines:
 # Clone and setup development environment
 git clone https://github.com/homemlab/flync.git
 cd flync
-git checkout v2
+git checkout master
 
-# Create development environment with optional dev packages
+# Create development environment
 conda env create -f environment.yml
 conda activate flync
-pip install -e ".[dev]"  # Includes pytest, black, flake8, mypy
+
+# Install in development mode
+pip install -e .
+
+# Optional: Install development dependencies
+pip install pytest black flake8 mypy
 ```
 
 ### Code Style
@@ -1251,6 +1277,46 @@ black src/flync/
 mypy src/flync/
 ```
 
+### Creating a Release
+
+FLYNC uses automated CI/CD with GitHub Actions. To create a new release:
+
+1. **Update version number** in relevant files:
+   - `pyproject.toml` (version field)
+   - `conda-recipe/meta.yaml` (version field)
+   - `README.md` (if needed)
+
+2. **Commit changes**:
+   ```bash
+   git add .
+   git commit -m "Bump version to X.Y.Z"
+   git push origin master
+   ```
+
+3. **Create and push a version tag**:
+   ```bash
+   git tag -a vX.Y.Z -m "Release version X.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+4. **Automated CI/CD will**:
+   - Run tests on Python 3.11
+   - Build and publish conda package to Anaconda Cloud
+   - Build and push Docker images to GitHub Container Registry
+     - `ghcr.io/homemlab/flync:X.Y.Z` (runtime)
+     - `ghcr.io/homemlab/flync:X.Y.Z-prewarmed` (with cached tracks)
+   - Optionally publish to PyPI (if token configured)
+   - Create GitHub Release with changelog
+
+5. **Manual verification**:
+   - Check [GitHub Releases](https://github.com/homemlab/flync/releases)
+   - Verify Docker images at [GitHub Packages](https://github.com/homemlab/flync/pkgs/container/flync)
+   - Verify conda package at [Anaconda Cloud](https://anaconda.org/bioconda/flync)
+
+**Secrets Required** (configure in GitHub repository settings):
+- `ANACONDA_TOKEN`: For uploading to Anaconda Cloud
+- `PYPI_API_TOKEN`: (Optional) For publishing to PyPI
+
 ### Workflow for Contributions
 
 1. Fork the repository
@@ -1258,7 +1324,7 @@ mypy src/flync/
 3. Make your changes with clear commit messages
 4. Ensure code passes style checks and tests
 5. Update documentation if needed
-6. Submit a pull request to the `v2` branch
+6. Submit a pull request to the `master` branch
 
 ### Reporting Issues
 
@@ -1319,6 +1385,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 **Version**: 1.0.0  
-**Branch**: v2 (production-ready)  
+**Branch**: master (production-ready)  
 **Last Updated**: November 2025  
 **Maintainers**: FLYNC Contributors
