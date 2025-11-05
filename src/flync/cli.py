@@ -23,6 +23,10 @@ class FlyncGroup(click.Group):
 
     def parse_args(self, ctx, args):
         """Override to provide helpful error messages for common mistakes"""
+        # Allow --help and --version to pass through
+        if args and args[0] in ("--help", "-h", "--version", "-v"):
+            return super().parse_args(ctx, args)
+
         # Check if user provided options without a command
         if args and args[0].startswith("-"):
             # Check if it looks like run-ml options
@@ -78,17 +82,47 @@ class FlyncGroup(click.Group):
         return super().parse_args(ctx, args)
 
 
-@click.group(cls=FlyncGroup)
-@click.version_option()
-def main():
+@click.group(cls=FlyncGroup, invoke_without_command=True)
+@click.option("--version", is_flag=True, help="Show version and exit")
+@click.pass_context
+def main(ctx, version):
     """
     FLYNC: lncRNA discovery pipeline for Drosophila melanogaster
 
     A bioinformatics pipeline for discovering and classifying non-coding genes.
     Combines RNA-seq processing, feature extraction from genomic databases,
     and machine learning prediction.
+
+    \b
+    Available commands:
+      setup     Download genome and build indices
+      config    Generate configuration template
+      run-bio   Run bioinformatics assembly pipeline
+      run-ml    Run ML lncRNA prediction pipeline
+      run-all   Run complete pipeline (bioinformatics + ML)
+
+    \b
+    Examples:
+      flync setup --genome-dir genome
+      flync config --template --output config.yaml
+      flync run-bio -c config.yaml -j 8
+      flync run-ml -g merged.gtf -o predictions.csv -r genome.fa
+      flync run-all -c config.yaml -j 8
     """
-    pass
+    if version:
+        try:
+            from importlib.metadata import version as get_version
+
+            pkg_version = get_version("flync")
+        except Exception:
+            pkg_version = "1.0.0"
+        click.echo(f"FLYNC version {pkg_version}")
+        ctx.exit(0)
+
+    # Show help if no command provided
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
 
 
 @main.command("run-bio")

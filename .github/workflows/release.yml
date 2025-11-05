@@ -48,8 +48,9 @@ jobs:
         shell: bash -l {0}
         run: |
           conda activate flync
-          flync --help
           flync --version
+          flync --help
+          flync config --help
           flync config --template --output test_config.yaml
       
       - name: Lint with flake8 (optional)
