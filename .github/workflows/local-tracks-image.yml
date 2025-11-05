@@ -1,9 +1,9 @@
 name: Build and publish Docker image with local tracks
 
 on:
-  workflow_dispatch:
-  workflow_run:
-    workflows: ["Build and publish envs Docker image"]
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   push_to_registry:
