@@ -57,7 +57,8 @@ class FlyncGroup(click.Group):
                 click.echo("Error: Missing command.", err=True)
                 click.echo("\nAvailable commands:", err=True)
                 click.echo(
-                    "  flync run-all  - Run complete pipeline (bioinformatics + ML)", err=True
+                    "  flync run-all  - Run complete pipeline (bioinformatics + ML)",
+                    err=True,
                 )
                 click.echo(
                     "  flync run-bio  - Run bioinformatics assembly pipeline", err=True
@@ -339,7 +340,7 @@ def run_ml(
 def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
     """
     Run the complete FLYNC pipeline end-to-end.
-    
+
     This command orchestrates the entire lncRNA discovery workflow:
     1. Bioinformatics pipeline (flync run-bio):
        - Read mapping, assembly, merging, quantification
@@ -347,13 +348,13 @@ def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
     2. ML prediction pipeline (flync run-ml):
        - Feature extraction from assembled transcripts
        - lncRNA classification with trained EBM model
-    
+
     The config file should contain both bioinformatics and ML parameters.
     Required config keys:
       - Bioinformatics: samples, genome, annotation, hisat_index, output_dir
       - ML: ml_reference_genome, ml_output_file, ml_gtf (optional, auto-detected)
       - Optional: ml_bwq_config, ml_cache_dir, ml_model
-    
+
     Example config.yaml:
         samples: metadata.csv
         genome: genome/genome.fa
@@ -366,7 +367,7 @@ def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
         ml_bwq_config: config/bwq_config.yaml  # optional
     """
     import yaml
-    
+
     click.echo("=" * 60)
     click.echo("FLYNC Complete Pipeline")
     click.echo("=" * 60)
@@ -374,25 +375,29 @@ def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
     click.echo(f"Bioinformatics cores: {cores}")
     click.echo(f"ML threads: {ml_threads}")
     click.echo()
-    
+
     # Load configuration
     try:
-        with open(configfile, 'r') as f:
+        with open(configfile, "r") as f:
             config = yaml.safe_load(f)
     except Exception as e:
         click.secho(f"✗ Failed to load config file: {e}", fg="red", bold=True)
         sys.exit(1)
-    
+
     # Validate required config keys
-    required_keys = ['output_dir']
+    required_keys = ["output_dir"]
     if not skip_bio:
-        required_keys.extend(['genome', 'annotation', 'hisat_index'])
+        required_keys.extend(["genome", "annotation", "hisat_index"])
     if not skip_ml:
-        required_keys.extend(['ml_reference_genome', 'ml_output_file'])
-    
+        required_keys.extend(["ml_reference_genome", "ml_output_file"])
+
     missing_keys = [k for k in required_keys if k not in config]
     if missing_keys:
-        click.secho(f"✗ Missing required config keys: {', '.join(missing_keys)}", fg="red", bold=True)
+        click.secho(
+            f"✗ Missing required config keys: {', '.join(missing_keys)}",
+            fg="red",
+            bold=True,
+        )
         click.echo("\nRequired keys for run-all:")
         click.echo("  - output_dir")
         if not skip_bio:
@@ -400,21 +405,23 @@ def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
         if not skip_ml:
             click.echo("  - ml_reference_genome, ml_output_file")
         sys.exit(1)
-    
-    output_dir = Path(config['output_dir'])
-    
+
+    output_dir = Path(config["output_dir"])
+
     # Phase 1: Bioinformatics Pipeline
     if not skip_bio:
         click.echo("\n[Phase 1/2] Running bioinformatics pipeline...")
         click.echo("-" * 60)
-        
+
         if dry_run:
             click.echo("(Dry run mode - no actual execution)")
-        
+
         try:
             # Find the Snakefile within the package
-            snakefile_path = pkg_resources.files("flync.workflows").joinpath("Snakefile")
-            
+            snakefile_path = pkg_resources.files("flync.workflows").joinpath(
+                "Snakefile"
+            )
+
             cmd = [
                 "snakemake",
                 "--snakefile",
@@ -426,73 +433,99 @@ def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
                 "--use-conda",
                 "--rerun-incomplete",
             ]
-            
+
             if dry_run:
                 cmd.append("--dry-run")
                 cmd.append("--printshellcmds")
-            
+
             click.echo(f"Executing: {' '.join(cmd)}\n")
             result = subprocess.run(cmd, check=not dry_run)
-            
+
             if not dry_run and result.returncode != 0:
                 click.secho(
                     f"✗ Bioinformatics pipeline failed with error code {result.returncode}",
                     fg="red",
-                    bold=True
+                    bold=True,
                 )
                 sys.exit(result.returncode)
-            
+
             click.secho("✓ Bioinformatics pipeline completed!", fg="green", bold=True)
-            
+
         except Exception as e:
-            click.secho(f"✗ Bioinformatics pipeline error: {str(e)}", fg="red", bold=True)
+            click.secho(
+                f"✗ Bioinformatics pipeline error: {str(e)}", fg="red", bold=True
+            )
             sys.exit(1)
     else:
         click.echo("\n[Phase 1/2] Skipping bioinformatics pipeline (--skip-bio)")
-    
+
     # Phase 2: ML Prediction Pipeline
     if not skip_ml:
         click.echo("\n[Phase 2/2] Running ML prediction pipeline...")
         click.echo("-" * 60)
-        
+
         if dry_run:
             click.echo("(Dry run mode - would run ML prediction)")
-            click.echo(f"  Input GTF: {output_dir / 'assemblies/merged-new-transcripts.gtf'}")
+            click.echo(
+                f"  Input GTF: {output_dir / 'assemblies/merged-new-transcripts.gtf'}"
+            )
             click.echo(f"  Output: {config.get('ml_output_file', 'predictions.csv')}")
-            click.secho("\n✓ Pipeline orchestration complete (dry run)", fg="green", bold=True)
+            click.secho(
+                "\n✓ Pipeline orchestration complete (dry run)", fg="green", bold=True
+            )
             return
-        
+
         try:
             from flync.ml.predictor import predict_lncrna
-            
+
             # Determine GTF file to use
             # Priority: config['ml_gtf'] > output_dir/assemblies/merged-new-transcripts.gtf
-            gtf_file = config.get('ml_gtf')
+            gtf_file = config.get("ml_gtf")
             if gtf_file is None:
-                gtf_file = str(output_dir / 'assemblies' / 'merged-new-transcripts.gtf')
+                gtf_file = str(output_dir / "assemblies" / "merged-new-transcripts.gtf")
                 click.echo(f"Auto-detected GTF: {gtf_file}")
-            
+
             if not Path(gtf_file).exists():
                 click.secho(f"✗ GTF file not found: {gtf_file}", fg="red", bold=True)
-                click.echo("Ensure bioinformatics pipeline completed successfully or provide ml_gtf in config")
+                click.echo(
+                    "Ensure bioinformatics pipeline completed successfully or provide ml_gtf in config"
+                )
                 sys.exit(1)
-            
+
             # Get ML parameters from config
-            ref_genome = config['ml_reference_genome']
-            output_file = config['ml_output_file']
-            bwq_config = config.get('ml_bwq_config')
-            model_file = config.get('ml_model')
-            cache_dir = config.get('ml_cache_dir')
-            
+            ref_genome = config["ml_reference_genome"]
+            output_file = config["ml_output_file"]
+            bwq_config = config.get("ml_bwq_config")
+            model_file = config.get("ml_model")
+            cache_dir = config.get("ml_cache_dir")
+
+            # Use bundled model if not provided
+            if model_file is None:
+                import flync
+
+                flync_dir = Path(flync.__file__).parent
+                model_path = flync_dir / "assets" / "flync_ebm_model.pkl"
+
+                if not model_path.exists():
+                    # Fallback: check if running from source
+                    src_path = Path(__file__).parent / "assets" / "flync_ebm_model.pkl"
+                    if src_path.exists():
+                        model_path = src_path
+                    else:
+                        raise FileNotFoundError(
+                            f"Cannot find bundled model at {model_path} or {src_path}"
+                        )
+
+                model_file = str(model_path)
+
             click.echo(f"  Input GTF: {gtf_file}")
             click.echo(f"  Reference genome: {ref_genome}")
             click.echo(f"  Output: {output_file}")
             if bwq_config:
                 click.echo(f"  BWQ config: {bwq_config}")
-            if model_file:
-                click.echo(f"  Model: {model_file}")
+            click.echo(f"  Model: {model_file}")
             click.echo()
-            
+
             # Run prediction
             predict_lncrna(
                 gtf_file=gtf_file,
@@ -505,27 +538,30 @@ def run_all(configfile, cores, ml_threads, dry_run, skip_bio, skip_ml):
                 clear_cache=False,
                 verbose=True,
             )
-            
+
             click.secho("✓ ML prediction completed!", fg="green", bold=True)
-            
+
         except Exception as e:
             click.secho(f"✗ ML prediction error: {str(e)}", fg="red", bold=True)
             import traceback
+
             traceback.print_exc()
             sys.exit(1)
     else:
         click.echo("\n[Phase 2/2] Skipping ML prediction (--skip-ml)")
-    
+
     # Final summary
     click.echo("\n" + "=" * 60)
-    click.secho("✓ Complete FLYNC pipeline finished successfully!", fg="green", bold=True)
+    click.secho(
+        "✓ Complete FLYNC pipeline finished successfully!", fg="green", bold=True
+    )
     click.echo("=" * 60)
     click.echo("\nResults:")
     if not skip_bio:
         click.echo(f"  Bioinformatics: {output_dir}")
         click.echo(f"    - Assemblies: {output_dir / 'assemblies'}")
         click.echo(f"    - Quantification: {output_dir / 'cov'}")
-        if (output_dir / 'dge').exists():
+        if (output_dir / "dge").exists():
             click.echo(f"    - DGE analysis: {output_dir / 'dge'}")
     if not skip_ml:
         click.echo(f"  ML predictions: {config['ml_output_file']}")

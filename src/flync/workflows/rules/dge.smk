@@ -62,7 +62,7 @@ rule ballgown_dge:
     params:
         cov_dir = OUTPUT_DIR / "cov",
         output_dir = OUTPUT_DIR / "dge",
-        script = lambda wildcards: Path(workflow.basedir).parent / "scripts" / "ballgown_dge.R",
+        script = lambda wildcards: Path(workflow.basedir) / "scripts" / "ballgown_dge.R",
     log:
         OUTPUT_DIR / "logs/dge/ballgown_dge.log"
     threads: 1

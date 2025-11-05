@@ -19,6 +19,7 @@
 # Load required libraries
 suppressPackageStartupMessages({
     library(ballgown)
+    library(matrixStats)  # For rowVars function
 })
 
 # Parse command-line arguments

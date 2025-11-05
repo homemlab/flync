@@ -68,15 +68,33 @@ elif samples_path_config is not None:
 
     # Read sample list - support both CSV and plain text formats
     if samples_path.suffix in ['.csv', '.tsv']:
-        # CSV/TSV format: first column is sample ID, other columns optional
-        # Try reading with header first, then without if first column name looks like a sample ID
-        samples_df = pd.read_csv(samples_path)
-        # Check if first column name looks like a sample ID (starts with SRR/ERR/DRR or no spaces)
-        first_col_name = samples_df.columns[0]
-        if first_col_name.startswith(('SRR', 'ERR', 'DRR')) or ' ' not in str(first_col_name):
-            # Likely no header, re-read without header
-            samples_df = pd.read_csv(samples_path, header=None)
-        SAMPLES = samples_df.iloc[:, 0].tolist()
+        # CSV/TSV format: prefer a header with a 'sample_id' column; gracefully fall back if absent
+        def _looks_like_sample_id(x: str) -> bool:
+            try:
+                return bool(re.match(r'^(SRR|ERR|DRR)\d+$', str(x)))
+            except Exception:
+                return False
+
+        # Use appropriate separator
+        sep = '\t' if samples_path.suffix == '.tsv' else ','
+
+        # First, read assuming header
+        samples_df = pd.read_csv(samples_path, sep=sep)
+
+        if 'sample_id' in samples_df.columns:
+            # Standard metadata with header row
+            SAMPLES = samples_df['sample_id'].astype(str).tolist()
+        else:
+            # Heuristics: if the first column name itself looks like a sample ID and
+            # the first cell does not, treat file as header-less and re-read without header.
+            first_col_name = str(samples_df.columns[0])
+            first_cell = str(samples_df.iloc[0, 0]) if not samples_df.empty else ''
+            if _looks_like_sample_id(first_col_name) and not _looks_like_sample_id(first_cell):
+                samples_df = pd.read_csv(samples_path, sep=sep, header=None)
+                SAMPLES = samples_df.iloc[:, 0].astype(str).tolist()
+            else:
+                # Assume first column holds sample IDs with a header (e.g., unnamed but not a sample ID)
+                SAMPLES = samples_df.iloc[:, 0].astype(str).tolist()
     elif samples_path.suffix == '.txt':
         # Plain text format: one sample ID per line
         with open(samples_path) as f:
