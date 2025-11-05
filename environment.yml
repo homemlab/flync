@@ -1,9 +1,8 @@
 name: flync
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
   - defaults
-channel_priority: flexible
 dependencies:
   # Python version (updated to 3.11)
   - python=3.11
@@ -18,13 +17,13 @@ dependencies:
   - sra-tools>=3.0.0
   - pybigwig>=0.3.22
   - pybedtools>=0.9.1
-  - snakemake-minimal>=7.32.0,<9.0
+  - snakemake-minimal>=7.32.0,<8.0
   
   # R and Ballgown for DGE analysis
-  - r-base>=4.2.0,<4.5
-  - bioconductor-ballgown>=2.30
-  - r-matrixstats>=0.63.0
-  - r-ggplot2>=3.4.0  # For optional MA plots
+  - r-base>=4.2.0,<4.4
+  - bioconductor-ballgown>=2.30,<2.38
+  - r-matrixstats
+  - r-ggplot2  # For optional MA plots
   
   # Build tools and utilities
   - pip>=23.0
