@@ -25,11 +25,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install system dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        wget \
-        curl \
-        git \
-        build-essential \
-        ca-certificates && \
+    wget \
+    curl \
+    git \
+    build-essential \
+    ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -92,8 +92,8 @@ RUN source /opt/conda/etc/profile.d/conda.sh && \
     conda activate flync && \
     echo "Pre-downloading genomic tracks..." && \
     python src/flync/workflows/scripts/predownload_tracks.py \
-        /opt/flync/bwq_config_build.yaml \
-        /opt/flync/bwq_persistent_cache && \
+    /opt/flync/bwq_config_build.yaml \
+    /opt/flync/bwq_persistent_cache && \
     echo "Tracks pre-downloaded successfully!" && \
     rm /opt/flync/bwq_config_build.yaml
 
