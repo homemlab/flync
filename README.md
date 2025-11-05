@@ -5,7 +5,7 @@
 FLYNC is a complete bioinformatics pipeline for discovering and classifying long non-coding RNAs (lncRNAs) in *Drosophila melanogaster*. It combines RNA-seq processing, comprehensive genomic feature extraction, and machine learning classification to identify novel lncRNA candidates.
 
 **Version**: 1.0.0 (Python-first architecture)  
-**Branch**: v2 (production-ready)  
+**Branch**: master (production-ready)  
 **Last Updated**: November 2025
 
 ---
@@ -22,7 +22,7 @@ FLYNC is a complete bioinformatics pipeline for discovering and classifying long
 - [Advanced Usage](#advanced-usage)
 - [Troubleshooting](#troubleshooting)
 - [Project Structure](#project-structure)
-- [Migration from v1](#migration-from-v1)
+- [Migration from Legacy Version](#migration-from-legacy-version)
 - [Contributing](#contributing)
 - [Citation](#citation)
 
@@ -30,16 +30,30 @@ FLYNC is a complete bioinformatics pipeline for discovering and classifying long
 
 ## Pipeline Overview
 
-FLYNC executes a complete lncRNA discovery workflow in two main phases:
+FLYNC executes a complete lncRNA discovery workflow with three main execution modes:
 
-### Phase 1: Bioinformatics Pipeline (`flync run-bio`)
+### Complete Pipeline (`flync run-all`)
+Run the entire workflow end-to-end with a single command:
 1. **Read Mapping** - Align RNA-seq reads to reference genome using HISAT2
 2. **Transcriptome Assembly** - Reconstruct transcripts per sample with StringTie
 3. **Assembly Merging** - Create unified transcriptome with gffcompare
 4. **Novel Transcript Extraction** - Identify transcripts not in reference annotation
 5. **Quantification** - Calculate expression levels per transcript
+6. **DGE Analysis** (optional) - Differential expression with Ballgown when metadata provided
+7. **Feature Extraction** - Extract multi-modal genomic features
+8. **ML Classification** - Predict lncRNA candidates using trained EBM model
+
+### Phase 1: Bioinformatics Pipeline (`flync run-bio`)
+Run only the RNA-seq processing and assembly:
+1. **Read Mapping** - Align RNA-seq reads to reference genome using HISAT2
+2. **Transcriptome Assembly** - Reconstruct transcripts per sample with StringTie
+3. **Assembly Merging** - Create unified transcriptome with gffcompare
+4. **Novel Transcript Extraction** - Identify transcripts not in reference annotation
+5. **Quantification** - Calculate expression levels per transcript
+6. **DGE Analysis** (optional) - Differential expression with Ballgown when metadata.csv provided
 
 ### Phase 2: ML Prediction (`flync run-ml`)
+Run only the machine learning classification:
 1. **Feature Extraction** - Extract multi-modal genomic features:
    - K-mer frequencies (3-12mers) with TF-IDF and SVD dimensionality reduction
    - BigWig track signals (chromatin marks, CAGE-seq, conservation, ChIP-seq)
@@ -53,14 +67,17 @@ FLYNC executes a complete lncRNA discovery workflow in two main phases:
 
 ## Key Features
 
-✅ **Unified CLI Interface** - Single `flync` command with intuitive subcommands  
+✅ **Complete End-to-End Pipeline** - Single `flync run-all` command for full workflow  
+✅ **Unified Environment** - All dependencies managed in single `environment.yml`  
+✅ **Differential Expression** - Integrated Ballgown DGE analysis for condition comparisons  
+✅ **Public Python API** - Use FLYNC programmatically in custom workflows  
 ✅ **Flexible Input Modes** - Auto-detect samples from FASTQ directory or use sample lists  
 ✅ **Snakemake Orchestration** - Robust workflow management with automatic parallelization  
 ✅ **Comprehensive Features** - 100+ genomic features from multiple data sources  
 ✅ **Intelligent Caching** - Downloads and caches remote genomic tracks automatically  
 ✅ **Production-Ready Models** - Pre-trained EBM classifier with high accuracy  
-✅ **Docker Support** - Containerized deployment for reproducibility  
-✅ **Python-First** - Modern Python codebase (≥3.9) with type hints  
+✅ **Multi-Stage Docker** - Runtime and pre-warmed images for flexible deployment  
+✅ **Python 3.11** - Modern Python codebase with type hints and comprehensive documentation  
 
 ---
 
@@ -75,56 +92,94 @@ FLYNC executes a complete lncRNA discovery workflow in two main phases:
   - 20+ GB disk space (genome, indices, and tracks)
   - 4+ CPU cores (8+ recommended)
 
-### Install from Source
+### Install from Conda (Recommended)
+
+```bash
+# Create and activate environment with FLYNC
+conda create -n flync -c bioconda -c conda-forge flync
+conda activate flync
+
+# Verify installation
+flync --help
+```
+
+**What gets installed:**
+- **Python 3.11** with all dependencies
+- **Bioinformatics tools**: HISAT2, StringTie, gffcompare, samtools, bedtools, SRA-tools
+- **R and Ballgown**: For differential gene expression analysis
+- **Python packages**: pandas, scikit-learn, pyBigWig, gffutils, pyfaidx, snakemake, etc.
+- **ML frameworks**: interpret (for EBM), optuna, mlflow (for training)
+
+### Install from Source (Development)
+
+For development or if you need the latest unreleased features:
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/homemlab/flync.git
 cd flync
-git checkout v2  # Use the v2 branch (production)
+git checkout master  # Use the master branch (production)
 
-# 2. Create conda environment (includes all bioinformatics tools)
+# 2. Create conda environment with dependencies
 conda env create -f environment.yml
 
 # 3. Activate environment
 conda activate flync
 
-# 4. Install Python package
+# 4. Install package in development mode
 pip install -e .
 
 # 5. Verify installation
 flync --help
 ```
 
-**What gets installed:**
-- **Bioinformatics tools**: HISAT2, StringTie, gffcompare, samtools, bedtools, SRA-tools
-- **Python packages**: pandas, scikit-learn, pyBigWig, gffutils, pyfaidx, snakemake, etc.
-- **ML frameworks**: interpret (for EBM), optuna, mlflow (for training)
-
 ### Docker
 
-Pre-built Docker images provide a complete, portable environment:
+Two pre-built Docker images are available:
+
+#### Standard Runtime Image
+Downloads genomic tracks at runtime (smaller image size):
 
 ```bash
-# Standard image (~2GB)
-docker pull rfcdsantos/flync:latest
+# Build from source
+docker build -t flync:runtime .
 
-# Image with pre-downloaded genomic tracks (~5GB, faster for predictions)
-docker pull rfcdsantos/flync:local-tracks
+# Or pull from registry (when available)
+docker pull homemlab/flync:runtime
+
+# Run pipeline with mounted data
+docker run --rm -v $PWD:/data -v $PWD/results:/results flync:runtime \
+  flync run-all --configfile /data/config.yaml --cores 8
 ```
 
-**Run with Docker:**
+#### Pre-warmed Image
+Includes pre-downloaded genomic tracks for faster startup (larger image, ~3-5GB more):
+
 ```bash
-# Mount your data directory and run pipeline
-docker run --rm -v $PWD:/data rfcdsantos/flync:latest \
-  flync run-bio --configfile /data/config.yaml --cores 8
+# Build with custom BWQ config
+docker build -t flync:prewarmed --target flync-prewarmed \
+  --build-arg BWQ_CONFIG=config/bwq_config.yaml .
+
+# Or pull from registry (when available)
+docker pull homemlab/flync:prewarmed
+
+# Run pipeline (tracks already cached)
+docker run --rm -v $PWD:/data -v $PWD/results:/results flync:prewarmed \
+  flync run-ml --gtf /data/merged.gtf --output /results/predictions.csv \
+    --ref-genome /data/genome.fa
 ```
+
+**Docker Benefits:**
+- Complete isolated environment
+- No local conda installation needed
+- Reproducible across systems
+- Volume mounts for data and results
 
 ---
 
 ## Quick Start
 
-**Complete workflow in 5 commands:**
+**Complete workflow with `run-all` command:**
 
 ```bash
 # 1. Activate conda environment
@@ -135,12 +190,34 @@ flync setup --genome-dir genome
 
 # 3. Create configuration file
 flync config --template --output config.yaml
-# Edit config.yaml with your sample information
 
-# 4. Run bioinformatics pipeline
+# 4. Edit config.yaml with your paths and settings
+# See config_example_full.yaml for all available options
+
+# 5. Create metadata.csv with sample information (MUST have header row!)
+cat > metadata.csv << EOF
+sample_id,condition,replicate
+SRR123456,control,1
+SRR123457,control,2
+SRR123458,treatment,1
+SRR123459,treatment,2
+EOF
+
+# 6. Update config.yaml to use metadata.csv
+# Change: samples: null
+# To:     samples: metadata.csv
+
+# 7. Run complete pipeline (bioinformatics + ML + DGE)
+flync run-all --configfile config.yaml --cores 8
+```
+
+**Alternative: Step-by-step workflow:**
+
+```bash
+# Run bioinformatics pipeline only
 flync run-bio --configfile config.yaml --cores 8
 
-# 5. Predict lncRNAs
+# Then run ML prediction
 flync run-ml \
   --gtf results/assemblies/merged-new-transcripts.gtf \
   --output results/lncrna_predictions.csv \
@@ -148,9 +225,31 @@ flync run-ml \
   --threads 8
 ```
 
+**Python API Usage:**
+
+```python
+from flync import run_pipeline
+from pathlib import Path
+
+# Run complete pipeline programmatically
+result = run_pipeline(
+    config_path=Path("config.yaml"),
+    cores=8,
+    ml_threads=8
+)
+
+print(f"Status: {result['status']}")
+print(f"Predictions: {result['predictions_file']}")
+```
+
 **Output:**
 - `results/assemblies/merged.gtf` - Full transcriptome (reference + novel)
 - `results/assemblies/merged-new-transcripts.gtf` - Novel transcripts only
+- `results/cov/` - Per-sample quantification files
+- `results/dge/` - Differential expression analysis (if metadata.csv provided)
+  - `transcript_dge_results.csv` - Transcript-level DE results
+  - `gene_dge_results.csv` - Gene-level DE results
+  - `dge_summary.csv` - Summary statistics
 - `results/lncrna_predictions.csv` - lncRNA predictions with confidence scores
 
 ---
@@ -250,6 +349,8 @@ sample1,control,1
 sample2,control,2
 sample3,treated,1
 ```
+
+**⚠️ Important:** When using CSV metadata, the header row with column names (`sample_id`, `condition`) is **required**. Without headers, the DGE analysis will fail. The `sample_id` column is mandatory for sample identification, and the `condition` column is required to enable differential expression analysis.
 
 ### 3. Run Bioinformatics Pipeline
 
@@ -367,16 +468,177 @@ MSTRG.2.1,1,0.89,0.89
 awk -F',' '$3 > 0.90 && $2 == 1' results/lncrna_predictions.csv > high_conf_lncrnas.csv
 ```
 
+### 5. Run Complete Pipeline (Recommended)
+
+Execute both bioinformatics and ML prediction with a single command:
+
+```bash
+flync run-all --configfile config.yaml --cores 8
+```
+
+**Unified Configuration:**
+
+```yaml
+# Bioinformatics settings
+samples: metadata.csv
+genome: genome/genome.fa
+annotation: genome/genome.gtf
+hisat_index: genome/genome.idx
+output_dir: results
+threads: 8
+
+# ML settings (required for run-all)
+ml_reference_genome: genome/genome.fa
+ml_output_file: results/lncrna_predictions.csv
+ml_bwq_config: config/bwq_config.yaml  # Optional
+ml_cache_dir: /path/to/cache          # Optional
+```
+
+**What happens:**
+1. Runs bioinformatics pipeline (`flync run-bio`)
+2. Automatically detects output GTF (`results/assemblies/merged-new-transcripts.gtf`)
+3. Runs ML prediction on novel transcripts
+4. Generates DGE analysis if `metadata.csv` has condition column
+
+**Options:**
+```bash
+# Skip bioinformatics (use existing GTF)
+flync run-all -c config.yaml --skip-bio
+
+# Skip ML prediction (only run bioinformatics)
+flync run-all -c config.yaml --skip-ml
+
+# Dry run to see what would be executed
+flync run-all -c config.yaml --dry-run
+
+# Custom thread allocation
+flync run-all -c config.yaml --cores 16 --ml-threads 8
+```
+
+### 6. Differential Gene Expression (DGE)
+
+Run DGE analysis using Ballgown when metadata with conditions is provided:
+
+**Requirements:**
+- `samples` config key points to a CSV file (not TXT)
+- CSV **must have a header row** with column names
+- CSV **must contain** `sample_id` column (for sample identification)
+- CSV **must contain** `condition` column (for grouping samples in DGE)
+
+**Example metadata.csv:**
+```csv
+sample_id,condition,replicate
+SRR123456,control,1
+SRR123457,control,2
+SRR123458,treatment,1
+SRR123459,treatment,2
+```
+
+**⚠️ Critical:** The header row is **not optional**. If you omit it or have a headerless CSV, the DGE analysis will fail with an error about missing the `sample_id` column.
+
+**DGE runs automatically** when using `flync run-bio` or `flync run-all` with metadata CSV.
+
+**Output Files:**
+```
+results/dge/
+├── transcript_dge_results.csv  # Transcript-level differential expression
+├── gene_dge_results.csv        # Gene-level differential expression
+├── dge_summary.csv             # Analysis summary statistics
+├── transcript_ma_plot.png      # MA plot visualization
+└── ballgown_dge.log           # Analysis log
+```
+
+**DGE Results Format:**
+```csv
+id,pval,qval,fc,gene_name,gene_id
+MSTRG.1.1,0.001,0.01,2.5,gene_A,FBgn0001
+MSTRG.1.2,0.05,0.12,1.8,gene_B,FBgn0002
+```
+
+**Filter significant transcripts:**
+```bash
+# Get transcripts with FDR < 0.05
+awk -F',' '$3 < 0.05' results/dge/transcript_dge_results.csv > significant_de.csv
+```
+
+### 7. Python API Usage
+
+Use FLYNC programmatically in custom workflows:
+
+```python
+from flync import run_pipeline, run_bioinformatics, run_ml_prediction
+from pathlib import Path
+
+# Run complete pipeline
+result = run_pipeline(
+    config_path=Path("config.yaml"),
+    cores=8,
+    ml_threads=8,
+    verbose=True
+)
+
+if result['status'] == 'success':
+    print(f"✓ Pipeline completed!")
+    print(f"  Predictions: {result['predictions_file']}")
+    print(f"  Output directory: {result['output_dir']}")
+```
+
+**Run only bioinformatics:**
+```python
+from flync import run_bioinformatics
+
+result = run_bioinformatics(
+    config_path=Path("config.yaml"),
+    cores=16,
+    verbose=True
+)
+```
+
+**Run only ML prediction:**
+```python
+from flync import run_ml_prediction
+
+result = run_ml_prediction(
+    gtf_file=Path("merged.gtf"),
+    output_file=Path("predictions.csv"),
+    ref_genome=Path("genome.fa"),
+    threads=8,
+    verbose=True
+)
+
+print(f"Predicted {result['n_lncrna']} lncRNAs")
+```
+
+**Integration in larger workflows:**
+```python
+import flync
+
+# Part of a larger analysis pipeline
+def analyze_rnaseq_data(sample_dir, output_dir):
+    # Run FLYNC
+    result = flync.run_pipeline(
+        config_path=create_config(sample_dir, output_dir),
+        cores=8
+    )
+    
+    # Continue with downstream analyses
+    if result['status'] == 'success':
+        lncrnas = pd.read_csv(result['predictions_file'])
+        perform_enrichment_analysis(lncrnas)
+        generate_report(lncrnas, result['output_dir'])
+```
+
 ---
 
 ## Pipeline Architecture
 
-FLYNC follows a modular Python-first architecture:
+FLYNC follows a modular Python-first architecture with unified CLI:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     CLI Layer (click)                       │
-│  flync setup | config | run-bio | run-ml                   │
+│                   CLI Layer (click)                         │
+│  flync run-all | run-bio | run-ml | setup | config        │
+│  + Public Python API (flync.run_pipeline)                  │
 └──────────────┬────────────────────────┬─────────────────────┘
                │                        │
      ┌─────────▼────────┐    ┌─────────▼──────────┐
@@ -390,6 +652,7 @@ FLYNC follows a modular Python-first architecture:
      │  - assembly.smk  │    │  - bwq, kmer, mfe  │
      │  - merge.smk     │    │  - cleaning        │
      │  - quantify.smk  │    │                    │
+     │  - dge.smk ⭐    │    │                    │
      └──────────────────┘    └─────────┬──────────┘
                                        │
                             ┌──────────▼──────────┐
@@ -401,17 +664,22 @@ FLYNC follows a modular Python-first architecture:
 
 ### Core Components
 
-**1. CLI (`src/flync/cli.py`)**
-- Single unified command with 4 subcommands
+**1. CLI (`src/flync/cli.py`) & API (`src/flync/api.py`)**
+- Single unified command with 5 subcommands: `run-all`, `run-bio`, `run-ml`, `setup`, `config`
+- New `run-all` orchestrates complete pipeline end-to-end
+- Public Python API for programmatic access
 - Custom error handling and helpful messages
 - Absolute path resolution for file operations
 
 **2. Workflows (`src/flync/workflows/`)**
-- **Snakefile**: Main workflow orchestrator
+- **Snakefile**: Main workflow orchestrator with conditional DGE
 - **rules/mapping.smk**: HISAT2 alignment, SRA download, FASTQ symlinking
 - **rules/assembly.smk**: StringTie per-sample assembly
 - **rules/merge.smk**: StringTie merge + gffcompare
 - **rules/quantify.smk**: Expression quantification
+- **rules/dge.smk**: ⭐ Ballgown differential expression (new)
+- **scripts/ballgown_dge.R**: R script for Ballgown DGE analysis
+- **scripts/predownload_tracks.py**: Docker image track pre-caching
 
 **3. Feature Extraction (`src/flync/features/`)**
 - **feature_wrapper.py**: High-level orchestration
@@ -808,8 +1076,15 @@ flync/
 ├── README.md                  # This file
 ├── environment.yml            # Conda environment specification
 ├── pyproject.toml            # Python package metadata
-├── Dockerfile                # Docker image definition
-├── config.yaml               # Pipeline configuration (generated)
+├── Dockerfile                # Multi-stage Docker build (runtime + prewarmed)
+├── config.yaml               # Pipeline configuration (generated by user)
+├── config_example_full.yaml  # Complete example with all options documented
+│
+├── .github/workflows/        # CI/CD automation
+│   └── release.yml           # Build, test, and release workflow
+│
+├── conda-recipe/             # Conda package recipe
+│   └── meta.yaml             # Conda build configuration
 │
 ├── src/flync/                # Main Python package
 │   ├── __init__.py
@@ -901,9 +1176,9 @@ The following are not part of the active pipeline:
 
 ---
 
-## Migration from v1
+## Migration from Legacy Version
 
-If upgrading from the bash-based v1 pipeline:
+If upgrading from the bash-based legacy pipeline:
 
 ### Major Changes
 
@@ -915,8 +1190,8 @@ If upgrading from the bash-based v1 pipeline:
 
 ### Command Mapping
 
-| v1 Command | v2 Command |
-|------------|------------|
+| Legacy Command | Current Command |
+|----------------|-----------------|
 | `./flync sra <accessions>` | `flync run-bio -c config.yaml` |
 | `./get-genome.sh` | `flync setup --genome-dir genome` |
 | `./tux2map.sh` | `flync run-bio -c config.yaml` |
@@ -927,17 +1202,17 @@ If upgrading from the bash-based v1 pipeline:
 
 1. **Backup old installation:**
    ```bash
-   # Move v1 scripts to backup folder (already done if you see deprecated_v1_*)
+   # Move legacy scripts to backup folder (already done if you see deprecated_v1_*)
    ```
 
 2. **Remove old environments:**
    ```bash
-   # v1 used multiple environments in env/
+   # legacy version used multiple environments in env/
    rm -rf env/
    conda env remove -n flync_old  # If you had custom env names
    ```
 
-3. **Install v2:**
+3. **Install current version:**
    ```bash
    conda env create -f environment.yml
    conda activate flync
@@ -969,12 +1244,17 @@ Contributions are welcome! Please follow these guidelines:
 # Clone and setup development environment
 git clone https://github.com/homemlab/flync.git
 cd flync
-git checkout v2
+git checkout master
 
-# Create development environment with optional dev packages
+# Create development environment
 conda env create -f environment.yml
 conda activate flync
-pip install -e ".[dev]"  # Includes pytest, black, flake8, mypy
+
+# Install in development mode
+pip install -e .
+
+# Optional: Install development dependencies
+pip install pytest black flake8 mypy
 ```
 
 ### Code Style
@@ -997,6 +1277,46 @@ black src/flync/
 mypy src/flync/
 ```
 
+### Creating a Release
+
+FLYNC uses automated CI/CD with GitHub Actions. To create a new release:
+
+1. **Update version number** in relevant files:
+   - `pyproject.toml` (version field)
+   - `conda-recipe/meta.yaml` (version field)
+   - `README.md` (if needed)
+
+2. **Commit changes**:
+   ```bash
+   git add .
+   git commit -m "Bump version to X.Y.Z"
+   git push origin master
+   ```
+
+3. **Create and push a version tag**:
+   ```bash
+   git tag -a vX.Y.Z -m "Release version X.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+4. **Automated CI/CD will**:
+   - Run tests on Python 3.11
+   - Build and publish conda package to Anaconda Cloud
+   - Build and push Docker images to GitHub Container Registry
+     - `ghcr.io/homemlab/flync:X.Y.Z` (runtime)
+     - `ghcr.io/homemlab/flync:X.Y.Z-prewarmed` (with cached tracks)
+   - Optionally publish to PyPI (if token configured)
+   - Create GitHub Release with changelog
+
+5. **Manual verification**:
+   - Check [GitHub Releases](https://github.com/homemlab/flync/releases)
+   - Verify Docker images at [GitHub Packages](https://github.com/homemlab/flync/pkgs/container/flync)
+   - Verify conda package at [Anaconda Cloud](https://anaconda.org/bioconda/flync)
+
+**Secrets Required** (configure in GitHub repository settings):
+- `ANACONDA_TOKEN`: For uploading to Anaconda Cloud
+- `PYPI_API_TOKEN`: (Optional) For publishing to PyPI
+
 ### Workflow for Contributions
 
 1. Fork the repository
@@ -1004,7 +1324,7 @@ mypy src/flync/
 3. Make your changes with clear commit messages
 4. Ensure code passes style checks and tests
 5. Update documentation if needed
-6. Submit a pull request to the `v2` branch
+6. Submit a pull request to the `master` branch
 
 ### Reporting Issues
 
@@ -1065,6 +1385,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 **Version**: 1.0.0  
-**Branch**: v2 (production-ready)  
+**Branch**: master (production-ready)  
 **Last Updated**: November 2025  
 **Maintainers**: FLYNC Contributors

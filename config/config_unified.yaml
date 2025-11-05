@@ -1,0 +1,75 @@
+# FLYNC Complete Pipeline Configuration Example
+# 
+# This config file demonstrates the unified configuration for flync run-all
+# which runs both bioinformatics and ML prediction in a single command.
+#
+# Usage: flync run-all --configfile config_unified.yaml --cores 8
+
+# ============================================================================
+# BIOINFORMATICS PIPELINE CONFIGURATION
+# ============================================================================
+
+# Sample specification (choose one of three modes - see README)
+samples: metadata.csv              # CSV file with sample_id and condition columns
+# samples: samples.txt             # OR: Plain text file with sample IDs
+# samples: null                    # OR: Auto-detect from fastq_dir
+
+# FASTQ input (if using local files, not SRA)
+fastq_dir: /path/to/fastq/files
+fastq_paired: false                # true for paired-end, false for single-end
+
+# Reference genome files (created by 'flync setup --genome-dir genome')
+genome: genome/genome.fa
+annotation: genome/genome.gtf
+hisat_index: genome/genome.idx
+splice_sites: genome/genome.ss     # Optional, for splice-aware alignment
+
+# Output and resource allocation
+output_dir: results
+threads: 8
+
+# Tool parameters (optional - use defaults if omitted)
+params:
+  hisat2: "-p 8 --dta --dta-cufflinks"
+  stringtie_assemble: "-p 8"
+  stringtie_merge: ""
+  stringtie_quantify: "-eB"
+  download_threads: 4              # For SRA downloads
+
+# ============================================================================
+# ML PREDICTION CONFIGURATION (for run-all command)
+# ============================================================================
+
+# Required for run-all
+ml_reference_genome: genome/genome.fa
+ml_output_file: results/lncrna_predictions.csv
+
+# Optional ML parameters
+ml_gtf: null                       # null = auto-detect from output_dir/assemblies/
+                                   # OR specify custom GTF path
+
+ml_bwq_config: null                # null = use bundled config
+                                   # OR specify custom BigWig config path
+
+ml_model: null                     # null = use bundled EBM model
+                                   # OR specify custom model path
+
+ml_cache_dir: null                 # null = use temp directory
+                                   # OR specify custom cache directory for tracks
+
+# ============================================================================
+# DIFFERENTIAL EXPRESSION ANALYSIS (automatic when using metadata.csv)
+# ============================================================================
+# 
+# DGE analysis runs automatically when:
+# 1. samples config points to a CSV file (not TXT)
+# 2. CSV contains a 'condition' column
+#
+# Example metadata.csv:
+#   sample_id,condition,replicate
+#   sample1,control,1
+#   sample2,control,2
+#   sample3,treatment,1
+#   sample4,treatment,2
+#
+# DGE outputs will be saved to: results/dge/

@@ -4,7 +4,7 @@
 
 FLYNC is a **bioinformatics pipeline** for discovering long non-coding RNAs (lncRNAs) in *Drosophila melanogaster*. It combines RNA-seq processing (HISAT2 → StringTie → gffcompare) with machine learning classification (Random Forest/EBM) using genomic features (k-mers, chromatin marks, conservation, RNA structure).
 
-**Recently refactored** (Nov 2025) from bash scripts to Python-first architecture with Snakemake workflow orchestration. This is v2 branch; legacy code lives in `deprecated_v1_*` folders.
+**Recently refactored** (Nov 2025) from bash scripts to Python-first architecture with Snakemake workflow orchestration. Legacy code lives in `deprecated_v1_*` folders.
 
 ## Architecture & Core Components
 
@@ -185,10 +185,10 @@ df = fw.run_all(
 - **CLI patterns**: `src/flync/cli.py` (Click setup, error handling)
 - **Snakemake conventions**: `src/flync/workflows/Snakefile` (config loading, sample detection)
 - **Feature API**: `src/flync/features/README.md` (comprehensive usage guide)
-- **Migration notes**: `MIGRATION_GUIDE.md` (v1→v2 command mappings)
+- **Migration notes**: See README.md "Migration from Legacy Version" section
 
 ## Version Context
 - **Current**: v1.0.0 (Python-first refactoring complete)
-- **Branch**: v2 (master is legacy)
-- **Python**: ≥3.9 (uses modern typing, dataclasses)
+- **Branch**: master (production)
+- **Python**: ≥3.11 (uses modern typing, dataclasses)
 - **Conda**: Required (single `environment.yml`, NOT multiple env/ files)
