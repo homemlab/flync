@@ -16,3 +16,18 @@ try:
 except PackageNotFoundError:
     # Package is not installed
     pass
+
+# Public API
+from flync.api import (
+    run_pipeline,
+    run_bioinformatics,
+    run_ml_prediction,
+)
+
+__all__ = [
+    "__version__",
+    "__author__",
+    "run_pipeline",
+    "run_bioinformatics",
+    "run_ml_prediction",
+]
