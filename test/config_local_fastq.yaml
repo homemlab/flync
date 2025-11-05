@@ -1,0 +1,67 @@
+# FLYNC Pipeline Configuration - Local FASTQ with Specific Samples
+# 
+# Use this configuration when you want to process only specific samples
+# from your FASTQ directory (not all files).
+
+# ============================================================================
+# Sample Metadata
+# ============================================================================
+# CSV file with sample names and optional metadata
+samples: "test/metadata.csv"
+
+# ============================================================================
+# Local FASTQ Files
+# ============================================================================
+# Directory containing your FASTQ files
+fastq_dir: "/path/to/your/fastq/files"
+
+# Set to true for paired-end, false for single-end
+fastq_paired: true
+
+# ============================================================================
+# Reference Genome and Annotation
+# ============================================================================
+genome: "genome/genome.fa"
+annotation: "genome/genome.gtf"
+hisat_index: "genome/genome.idx"
+splice_sites: "genome/genome.ss"
+
+# ============================================================================
+# Output Directory
+# ============================================================================
+output_dir: "results"
+
+# ============================================================================
+# Computational Resources
+# ============================================================================
+threads: 8
+
+# ============================================================================
+# Tool-Specific Parameters
+# ============================================================================
+params:
+  # HISAT2 alignment parameters
+  hisat2: "-p 8 --dta --dta-cufflinks"
+  
+  # StringTie assembly parameters
+  stringtie_assemble: "-p 8"
+  
+  # StringTie merge parameters
+  stringtie_merge: ""
+  
+  # StringTie quantification parameters
+  stringtie_quantify: "-eB"
+
+# ============================================================================
+# Example Sample Metadata CSV (test/metadata.csv)
+# ============================================================================
+# If your FASTQ files are:
+#   sample1_1.fastq.gz, sample1_2.fastq.gz
+#   sample2_1.fastq.gz, sample2_2.fastq.gz
+#   sample3_1.fastq.gz, sample3_2.fastq.gz
+#
+# Your metadata.csv should contain:
+#   sample_id,condition,replicate
+#   sample1,control,1
+#   sample2,control,2
+#   sample3,treated,1

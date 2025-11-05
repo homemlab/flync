@@ -1,6 +1,106 @@
+# Docker
 .dockerignore
-genome/
+
+# IDEs
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Genome files (large)
+genome/
+*.fa
+*.fa.fai
+*.gtf
+*.ht2
+*.ss
+
+# Track files (large)
 *.bb
 *.bw
-.idea/*
+*.bigWig
+*.bigBed
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Results and outputs
+results/
+output/
+test_out/
+*_output/
+deprecated_v1_*/
+
+# Logs
+*.log
+run.log
+*.out.txt
+*.err.txt
+
+# Data files
+*.bam
+*.sam
+*.bai
+*.cram
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.sra
+
+# Temporary files
+tmp/
+temp/
+.snakemake/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MLflow
+mlruns/
+mlflow.db
+
+# Backup files
+*.bak
+*.backup
+*~
+*.old
+deprecated_*

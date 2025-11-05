@@ -1,0 +1,56 @@
+# Batch Optimization Configuration File
+# This file defines multiple dataset configurations for batch hyperparameter optimization
+
+# Global defaults (can be overridden in individual configurations)
+global_defaults:
+  optimization_direction: "maximize"
+  n_trials: 50
+  random_state: 99
+  job_timeout: 43200
+  trial_timeout: 21600
+  delay_between_jobs: 15
+  project_name: "Flync EBM optimization"
+  debug: true
+  threads: 20
+  top_n: 1
+  light_artifacts: true
+
+# Storage configuration (optional - can be overridden per config)
+storage:
+  mlflow_uri: "http://localhost:5000"
+  storage_url: "sqlite:///optuna.db"
+
+# Default models and metrics (can be overridden per config)
+default_models: ["ebm"]
+default_metric_combinations:
+  - ["precision"]
+  - ["precision", "recall"]
+
+# Dataset configurations - each represents a different dataset with its own parameters
+dataset_configs:
+  FINAL_ebm:
+      name: "Final EBM optimization experiment"
+      description: "Dataset with k-mer counting dimentionality reduction using SVD into a single bin. No filter applied. Contains final dataset corrections and seequence extraction."
+      
+      # Dataset paths
+      train_data: "X_train.parquet"
+      test_data: "X_test.parquet"
+      holdout_data: "X_val.parquet"
+      target_column: "y"
+      dataset_suffix: "FINAL_ebm"
+
+      # Experiment configuration
+      experiment_name: "FINAL_ebm"
+
+      # Feature correlation analysis
+      # analyze_correlations: true
+      # correlation_threshold: 0.90
+      
+      # Tags specific to this dataset
+      tags:
+        dataset_imbalance_technique: "none"
+        dataset_kmer_redux: "true"
+        features_cpat: "false"
+        features_regulators_mhe: ["remap", "tfbs"]
+        features_ss: "true"
+        features_filter: "none"

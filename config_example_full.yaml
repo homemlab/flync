@@ -1,0 +1,153 @@
+# FLYNC Complete Configuration Example
+# This file shows ALL available configuration options for the FLYNC pipeline
+# Copy this file and uncomment/modify the options you need
+
+# ==============================================================================
+# SAMPLE SPECIFICATION (Choose ONE of three modes)
+# ==============================================================================
+
+# --- MODE 1: Auto-detect samples from FASTQ directory (Recommended) ---
+# Set samples to null and provide fastq_dir to auto-detect sample names
+samples: null
+fastq_dir: "/path/to/fastq/directory"
+fastq_paired: false  # true for paired-end, false for single-end
+
+# --- MODE 2: Plain text sample list ---
+# Uncomment to use a text file with one sample ID per line
+# samples: "samples.txt"
+# fastq_dir: "/path/to/fastq/directory"  # Optional if using SRA
+
+# --- MODE 3: CSV metadata (Required for DGE analysis) ---
+# Uncomment to use CSV with sample metadata
+# IMPORTANT: CSV MUST have header row with 'sample_id' and 'condition' columns
+# samples: "metadata.csv"
+# fastq_dir: "/path/to/fastq/directory"  # Optional if using SRA
+
+# ==============================================================================
+# REFERENCE GENOME (Required - created by 'flync setup')
+# ==============================================================================
+
+genome: "genome/genome.fa"           # Reference genome FASTA file
+annotation: "genome/genome.gtf"      # Reference annotation GTF file
+hisat_index: "genome/genome.idx"     # HISAT2 index prefix
+splice_sites: "genome/genome.ss"     # Splice sites file (optional, auto-generated)
+
+# ==============================================================================
+# OUTPUT AND RESOURCES
+# ==============================================================================
+
+output_dir: "results"                # Main output directory
+threads: 8                           # Default threads for tools
+
+# ==============================================================================
+# BIOINFORMATICS TOOL PARAMETERS (Optional)
+# ==============================================================================
+
+params:
+  # HISAT2 alignment parameters
+  hisat2: "-p 8 --dta --dta-cufflinks"
+  
+  # StringTie assembly parameters (per-sample)
+  stringtie_assemble: "-p 8"
+  
+  # StringTie merge parameters
+  stringtie_merge: ""
+  
+  # StringTie quantification parameters (with -eB for Ballgown)
+  stringtie_quantify: "-eB"
+  
+  # SRA download threads (for prefetch/fasterq-dump)
+  download_threads: 4
+
+# ==============================================================================
+# MACHINE LEARNING CONFIGURATION (Required for 'flync run-all')
+# ==============================================================================
+
+# Reference genome for feature extraction (usually same as above)
+ml_reference_genome: "genome/genome.fa"
+
+# Output file for lncRNA predictions
+ml_output_file: "results/lncrna_predictions.csv"
+
+# Optional: Custom BigWig track configuration file
+# If not provided, uses default bundled tracks
+# ml_bwq_config: "config/bwq_config.yaml"
+
+# Optional: Custom trained ML model
+# If not provided, uses bundled EBM model
+# ml_model: "path/to/custom_model.pkl"
+
+# Optional: Cache directory for downloaded genomic tracks
+# If not provided, uses system temp directory
+# ml_cache_dir: "/path/to/cache/directory"
+
+# Optional: GTF file to use for ML prediction
+# If not provided, uses merged-new-transcripts.gtf from bioinformatics pipeline
+# ml_gtf: "results/assemblies/merged-new-transcripts.gtf"
+
+# ==============================================================================
+# ADVANCED OPTIONS
+# ==============================================================================
+
+# Optional: Custom coverage directory for expression features
+# If not provided, uses output_dir/cov
+# cov_dir: "results/cov"
+
+# Optional: Number of threads for ML feature extraction
+# If not provided, uses value from 'threads' above
+# ml_threads: 8
+
+# ==============================================================================
+# DIFFERENTIAL GENE EXPRESSION (DGE) - Automatic when metadata.csv provided
+# ==============================================================================
+
+# DGE analysis runs automatically when:
+#   1. 'samples' points to a CSV file (not TXT)
+#   2. CSV has header row with 'sample_id' and 'condition' columns
+#
+# No additional configuration needed - Ballgown parameters are preset.
+# Output files will be created in: output_dir/dge/
+#   - transcript_dge_results.csv
+#   - gene_dge_results.csv
+#   - dge_summary.csv
+#   - transcript_ma_plot.png (if ggplot2 available)
+
+# ==============================================================================
+# EXAMPLE COMPLETE CONFIGURATIONS
+# ==============================================================================
+
+# --- Example 1: Auto-detect samples, run complete pipeline ---
+# samples: null
+# fastq_dir: "data/fastq"
+# fastq_paired: true
+# genome: "genome/genome.fa"
+# annotation: "genome/genome.gtf"
+# hisat_index: "genome/genome.idx"
+# output_dir: "results"
+# threads: 16
+# ml_reference_genome: "genome/genome.fa"
+# ml_output_file: "results/predictions.csv"
+
+# --- Example 2: SRA download with DGE analysis ---
+# samples: "metadata.csv"  # Must have headers: sample_id,condition,replicate
+# genome: "genome/genome.fa"
+# annotation: "genome/genome.gtf"
+# hisat_index: "genome/genome.idx"
+# output_dir: "results"
+# threads: 8
+# ml_reference_genome: "genome/genome.fa"
+# ml_output_file: "results/predictions.csv"
+
+# --- Example 3: Custom tracks and model ---
+# samples: "samples.txt"
+# fastq_dir: "data/fastq"
+# genome: "genome/genome.fa"
+# annotation: "genome/genome.gtf"
+# hisat_index: "genome/genome.idx"
+# output_dir: "results"
+# threads: 8
+# ml_reference_genome: "genome/genome.fa"
+# ml_output_file: "results/predictions.csv"
+# ml_bwq_config: "config/custom_tracks.yaml"
+# ml_model: "models/custom_rf_model.pkl"
+# ml_cache_dir: "/data/cache"

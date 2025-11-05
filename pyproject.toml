@@ -1,0 +1,43 @@
+[project]
+name = "flync"
+version = "1.0.0"
+description = "FLYNC: lncRNA discovery pipeline for Drosophila melanogaster"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "FLYNC Contributors"}
+]
+keywords = ["bioinformatics", "lncRNA", "genomics", "machine-learning", "RNA-seq"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+
+# Note: All dependencies are managed in environment.yml
+# Install with: conda env create -f environment.yml && conda activate flync && pip install -e .
+
+[project.scripts]
+flync = "flync.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"flync.assets" = ["*.model", "*.pkl", "*.json"]
+"flync.workflows" = ["Snakefile", "rules/*.smk", "scripts/*.R"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

@@ -1,0 +1,147 @@
+"""
+FLYNC Bioinformatics Pipeline - Main Snakefile
+
+This Snakefile orchestrates the RNA-seq analysis pipeline for lncRNA discovery.
+It includes read mapping, transcriptome assembly, merging, and quantification.
+"""
+
+import pandas as pd
+from pathlib import Path
+import os
+import re
+
+# Note: Configuration is loaded via --configfile CLI argument
+# No hardcoded configfile directive to avoid loading defaults
+
+# Parse sample metadata - resolve path relative to working directory or as absolute
+samples_path_config = config.get("samples", None)
+
+# Auto-detect samples from FASTQ directory if no sample file provided
+if samples_path_config is None and config.get("fastq_dir", None) is not None:
+    # Auto-detect mode: scan FASTQ directory for sample names
+    fastq_dir = Path(config["fastq_dir"])
+    if not fastq_dir.exists():
+        raise FileNotFoundError(f"FASTQ directory not found: {fastq_dir}")
+    
+    # Scan for FASTQ files
+    import re
+    sample_set = set()
+    
+    # Look for paired-end patterns: sample_1.fastq.gz, sample_2.fastq.gz
+    for pattern in ["*_1.fastq.gz", "*_1.fq.gz", "*.fastq.gz", "*.fq.gz"]:
+        for fq_file in fastq_dir.glob(pattern):
+            # Remove suffixes to get sample name
+            sample_name = fq_file.stem.replace('.fastq', '').replace('.fq', '')
+            # Remove _1, _2, _R1, _R2 suffixes for paired-end
+            sample_name = re.sub(r'[_\.][12]$', '', sample_name)
+            sample_name = re.sub(r'[_\.]R[12]$', '', sample_name, flags=re.IGNORECASE)
+            sample_set.add(sample_name)
+    
+    SAMPLES = sorted(list(sample_set))
+    
+    if len(SAMPLES) == 0:
+        raise ValueError(
+            f"No FASTQ files found in {fastq_dir}\n"
+            f"  Expected files like: sample_1.fastq.gz, sample_2.fastq.gz\n"
+            f"  Or: sample.fastq.gz"
+        )
+    
+    print(f"Auto-detected {len(SAMPLES)} samples from FASTQ directory: {SAMPLES}")
+
+elif samples_path_config is not None:
+    # Manual mode: read from specified file
+    samples_path = Path(samples_path_config)
+    if not samples_path.is_absolute():
+        # Try relative to current working directory first
+        if not samples_path.exists():
+            # If not found, try relative to config file directory
+            config_dir = Path(workflow.configfiles[0]).parent if workflow.configfiles else Path.cwd()
+            samples_path = config_dir / samples_path
+            
+    if not samples_path.exists():
+        raise FileNotFoundError(
+            f"Sample metadata file not found: {samples_path_config}\n"
+            f"  Looked in: {samples_path.resolve()}\n"
+            f"  Working directory: {Path.cwd()}\n"
+            f"  Please provide the correct path in your config file or omit 'samples' to auto-detect."
+        )
+
+    # Read sample list - support both CSV and plain text formats
+    if samples_path.suffix in ['.csv', '.tsv']:
+        # CSV/TSV format: prefer a header with a 'sample_id' column; gracefully fall back if absent
+        def _looks_like_sample_id(x: str) -> bool:
+            try:
+                return bool(re.match(r'^(SRR|ERR|DRR)\d+$', str(x)))
+            except Exception:
+                return False
+
+        # Use appropriate separator
+        sep = '\t' if samples_path.suffix == '.tsv' else ','
+
+        # First, read assuming header
+        samples_df = pd.read_csv(samples_path, sep=sep)
+
+        if 'sample_id' in samples_df.columns:
+            # Standard metadata with header row
+            SAMPLES = samples_df['sample_id'].astype(str).tolist()
+        else:
+            # Heuristics: if the first column name itself looks like a sample ID and
+            # the first cell does not, treat file as header-less and re-read without header.
+            first_col_name = str(samples_df.columns[0])
+            first_cell = str(samples_df.iloc[0, 0]) if not samples_df.empty else ''
+            if _looks_like_sample_id(first_col_name) and not _looks_like_sample_id(first_cell):
+                samples_df = pd.read_csv(samples_path, sep=sep, header=None)
+                SAMPLES = samples_df.iloc[:, 0].astype(str).tolist()
+            else:
+                # Assume first column holds sample IDs with a header (e.g., unnamed but not a sample ID)
+                SAMPLES = samples_df.iloc[:, 0].astype(str).tolist()
+    elif samples_path.suffix == '.txt':
+        # Plain text format: one sample ID per line
+        with open(samples_path) as f:
+            SAMPLES = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    else:
+        # Try to read as CSV by default
+        try:
+            samples_df = pd.read_csv(samples_path)
+            # Check if likely no header
+            first_col_name = samples_df.columns[0]
+            if first_col_name.startswith(('SRR', 'ERR', 'DRR')) or ' ' not in str(first_col_name):
+                samples_df = pd.read_csv(samples_path, header=None)
+            SAMPLES = samples_df.iloc[:, 0].tolist()
+        except:
+            # Fall back to plain text
+            with open(samples_path) as f:
+                SAMPLES = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    
+    print(f"Loaded {len(SAMPLES)} samples from {samples_path}: {SAMPLES}")
+
+else:
+    # SRA mode: must have sample file
+    raise ValueError(
+        "No samples specified. Either:\n"
+        "  1. Set 'samples' in config.yaml to a CSV/TXT file with sample IDs, OR\n"
+        "  2. Use --fastq-dir to auto-detect samples from FASTQ filenames"
+    )
+
+# Define output directory
+OUTPUT_DIR = Path(config["output_dir"])
+
+# Include rule modules
+include: "rules/mapping.smk"
+include: "rules/assembly.smk"
+include: "rules/merge.smk"
+include: "rules/quantify.smk"
+include: "rules/dge.smk"
+
+# Define the final target rule
+rule all:
+    input:
+        # Merged assembly
+        OUTPUT_DIR / "assemblies/merged.gtf",
+        OUTPUT_DIR / "assemblies/assembled-new-transcripts.fa",
+        # Comparison results
+        OUTPUT_DIR / "gffcompare/gffcmp.stats",
+        # Quantification (if samples provided)
+        OUTPUT_DIR / "cov/quantification_complete.txt" if len(SAMPLES) > 0 else [],
+        # Differential expression (if metadata CSV provided with condition column)
+        OUTPUT_DIR / "dge/dge_summary.csv" if RUN_DGE else []

@@ -1,0 +1,51 @@
+# FLYNC Pipeline Configuration - Auto-Detection Mode
+# 
+# This is the SIMPLEST configuration - no sample file needed!
+# The pipeline automatically detects all samples from FASTQ filenames.
+
+# ============================================================================
+# Sample List - AUTO-DETECT MODE
+# ============================================================================
+# Set to null to enable auto-detection from FASTQ filenames
+samples: null
+
+# ============================================================================
+# Local FASTQ Files
+# ============================================================================
+# Directory containing your FASTQ files
+fastq_dir: "/path/to/your/fastq/files"
+
+# Set to true for paired-end, false for single-end
+fastq_paired: false
+
+# ============================================================================
+# Reference Genome and Annotation
+# ============================================================================
+genome: "genome/genome.fa"
+annotation: "genome/genome.gtf"
+hisat_index: "genome/genome.idx"
+splice_sites: "genome/genome.ss"
+
+# ============================================================================
+# Output Directory
+# ============================================================================
+output_dir: "results"
+
+# ============================================================================
+# Computational Resources
+# ============================================================================
+threads: 8
+
+# ============================================================================
+# USAGE EXAMPLE
+# ============================================================================
+# Your FASTQ files in /data/my_experiment/fastq/:
+#   exp1_rep1.fastq.gz
+#   exp1_rep2.fastq.gz
+#   exp2_rep1.fastq.gz
+#
+# Run command:
+#   flync run-bio --configfile config_auto.yaml --cores 8
+#
+# Pipeline auto-detects samples: exp1_rep1, exp1_rep2, exp2_rep1
+# No sample list file needed!
