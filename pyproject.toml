@@ -32,7 +32,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "flync.assets" = ["*.model", "*.pkl", "*.json"]
-"flync.workflows" = ["Snakefile", "rules/*.smk"]
+"flync.workflows" = ["Snakefile", "rules/*.smk", "scripts/*.R"]
 
 [tool.black]
 line-length = 100

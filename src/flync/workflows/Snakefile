@@ -113,6 +113,7 @@ include: "rules/mapping.smk"
 include: "rules/assembly.smk"
 include: "rules/merge.smk"
 include: "rules/quantify.smk"
+include: "rules/dge.smk"
 
 # Define the final target rule
 rule all:
@@ -123,4 +124,6 @@ rule all:
         # Comparison results
         OUTPUT_DIR / "gffcompare/gffcmp.stats",
         # Quantification (if samples provided)
-        OUTPUT_DIR / "cov/quantification_complete.txt" if len(SAMPLES) > 0 else []
+        OUTPUT_DIR / "cov/quantification_complete.txt" if len(SAMPLES) > 0 else [],
+        # Differential expression (if metadata CSV provided with condition column)
+        OUTPUT_DIR / "dge/dge_summary.csv" if RUN_DGE else []
