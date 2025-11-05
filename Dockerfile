@@ -28,6 +28,7 @@ RUN apt-get update && \
         wget \
         curl \
         git \
+        build-essential \
         ca-certificates && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

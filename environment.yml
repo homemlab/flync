@@ -28,6 +28,8 @@ dependencies:
   # Build tools and utilities
   - pip>=23.0
   - git>=2.40.0
+  - gcc_linux-64  # C compiler for building Python packages
+  - gxx_linux-64  # C++ compiler for building Python packages
 
   # Python packages (consolidated from pyproject.toml)
   - pip:
