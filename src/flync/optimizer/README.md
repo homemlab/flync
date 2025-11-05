@@ -1,46 +1,139 @@
-# Hyperparameter Optimization CLI Tool
+# FLYNC Model Training & Hyperparameter Optimization
 
-A comprehensive command-line tool for hyperparameter optimization of machine learning models using Optuna and MLflow. This tool supports RandomForest and XGBoost classifiers with multiple optimization metrics and provides full experiment tracking.
+Comprehensive tools for training and optimizing machine learning models for lncRNA classification.
 
-## Features
+This module provides utilities for:
+- **Hyperparameter optimization** using Optuna with multi-objective support
+- **Experiment tracking** via MLflow with comprehensive metrics and visualizations
+- **Model training** with RandomForest and XGBoost classifiers
+- **Feature importance analysis** with stability tracking across trials
 
-- **Multiple Model Support**: RandomForest and XGBoost classifiers
-- **Flexible Optimization**: Optimize for multiple metrics (precision, recall, f1, accuracy, roc_auc, pr_auc)
-- **Experiment Tracking**: Full MLflow integration with visualization
-- **Persistent Storage**: Optuna studies stored in database for resumability
-- **CLI-Based**: Easy-to-use command-line interface
-- **Comprehensive Logging**: Detailed logging and error handling
-- **Enhanced Feature Importance**: Advanced feature importance analysis with percentages and trial tracking
-- **Rich Visualizations**: ROC curves, PR curves, feature importance plots, and Optuna optimization plots
-- **Stability Analysis**: Track feature importance stability across optimization trials
+---
 
-## Installation
+## Table of Contents
 
-1. Clone or download the repository
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+- [Quick Start](#quick-start)
+- [Module Overview](#module-overview)
+- [Usage Guide](#usage-guide)
+  - [Data Preparation](#1-data-preparation)
+  - [Hyperparameter Optimization](#2-hyperparameter-optimization)
+  - [Viewing Results](#3-viewing-results)
+  - [Model Deployment](#4-model-deployment)
+- [Command Reference](#command-reference)
+- [Optimization Details](#optimization-details)
+- [Output Files](#output-files)
+- [Advanced Usage](#advanced-usage)
+- [Troubleshooting](#troubleshooting)
+
+---
 
 ## Quick Start
 
-### 1. Prepare Your Data
+**Complete training workflow from feature files to optimized model:**
 
-If you have separate positive and negative sample files:
+```bash
+# 1. Prepare data splits (stratified train/val/test)
+python prepare_data.py \
+    --positive-file lncrna_features.parquet \
+    --negative-file protein_coding_features.parquet \
+    --output-dir datasets \
+    --target-column y
+
+# 2. Run hyperparameter optimization (RandomForest example)
+python hyperparameter_optimizer.py \
+    --train-data datasets/train.parquet \
+    --test-data datasets/test.parquet \
+    --holdout-data datasets/holdout.parquet \
+    --target-column y \
+    --model-type randomforest \
+    --optimization-metrics precision f1 \
+    --study-name rf_optimization \
+    --n-trials 100 \
+    --experiment-name "RandomForest_Optimization"
+
+# 3. View results in MLflow UI
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+# Open http://localhost:5000 in browser
+
+# 4. Extract best model schema for inference
+python extract_model_schema.py \
+    --model-path best_model.pkl \
+    --training-data datasets/train.parquet \
+    --output-schema model_schema.json
+```
+
+---
+
+## Module Overview
+
+### Files in this Module
+
+**`hyperparameter_optimizer.py`** - Main optimization script
+- Optuna-based hyperparameter search
+- Multi-objective optimization support
+- MLflow experiment tracking
+- Comprehensive metric logging
+- Feature importance analysis per trial
+
+**`batch_optimization.py`** - Batch training utilities
+- Run multiple optimization experiments
+- Compare different model configurations
+- Automated model selection
+
+**`prepare_data.py`** (referenced, may be in parent directory)
+- Stratified train/validation/test splitting
+- Balanced class sampling
+- Feature preprocessing
+
+### Key Features
+
+✅ **Multiple Model Support**: RandomForest and XGBoost  
+✅ **Multi-Objective Optimization**: Optimize for multiple metrics simultaneously  
+✅ **Persistent Studies**: Resume interrupted optimizations  
+✅ **Comprehensive Tracking**: All metrics, parameters, and artifacts logged to MLflow  
+✅ **Feature Importance**: Tracked per trial with stability analysis  
+✅ **Visualization Suite**: ROC/PR curves, feature importance plots, optimization history  
+✅ **Reproducibility**: Fixed random seeds and versioned datasets  
+
+---
+
+## Usage Guide
+
+### 1. Data Preparation
+
+**From separate positive/negative files:**
 
 ```bash
 python prepare_data.py \
-    --positive-file ncr_dim_redux.parquet \
-    --negative-file pcg_dim_redux.parquet \
+    --positive-file lncrna_features.parquet \
+    --negative-file protein_coding_features.parquet \
     --output-dir datasets \
-    --target-column y
+    --target-column y \
+    --train-size 0.7 \
+    --val-size 0.15 \
+    --test-size 0.15 \
+    --random-state 42
 ```
 
-This will create `train.parquet`, `test.parquet`, and `holdout.parquet` in the `datasets/` directory.
+**Outputs:**
+- `datasets/train.parquet` - Training set (70%)
+- `datasets/test.parquet` - Validation set (15%)
+- `datasets/holdout.parquet` - Final holdout set (15%)
 
-### 2. Run Hyperparameter Optimization
+**From single labeled file:**
 
-#### RandomForest Example:
+```bash
+python prepare_data.py \
+    --dataset labeled_features.parquet \
+    --target-column is_lncrna \
+    --output-dir datasets \
+    --train-size 0.7 --val-size 0.15 --test-size 0.15
+```
+
+### 2. Hyperparameter Optimization
+
+**RandomForest optimization:**
+
 ```bash
 python hyperparameter_optimizer.py \
     --train-data datasets/train.parquet \
@@ -50,12 +143,14 @@ python hyperparameter_optimizer.py \
     --model-type randomforest \
     --optimization-metrics precision f1 \
     --optimization-direction maximize \
-    --study-name rf_precision_f1_study \
+    --study-name rf_precision_f1 \
     --n-trials 100 \
-    --experiment-name "RandomForest_Precision_F1_Optimization"
+    --experiment-name "RF_Precision_F1_Optimization" \
+    --random-state 42
 ```
 
-#### XGBoost Example:
+**XGBoost optimization:**
+
 ```bash
 python hyperparameter_optimizer.py \
     --train-data datasets/train.parquet \
@@ -63,48 +158,15 @@ python hyperparameter_optimizer.py \
     --holdout-data datasets/holdout.parquet \
     --target-column y \
     --model-type xgboost \
-    --optimization-metrics precision recall \
+    --optimization-metrics roc_auc pr_auc \
     --optimization-direction maximize \
-    --study-name xgb_precision_recall_study \
-    --n-trials 100 \
-    --experiment-name "XGBoost_Precision_Recall_Optimization"
+    --study-name xgb_auc_optimization \
+    --n-trials 150 \
+    --experiment-name "XGB_AUC_Optimization"
 ```
 
-### 3. View Results
+**Multi-objective optimization (optimize precision AND recall):**
 
-Start MLflow UI to view results:
-```bash
-mlflow ui --backend-store-uri sqlite:///mlflow.db
-```
-
-Then open http://localhost:5000 in your browser.
-
-## Usage
-
-### Command Line Arguments
-
-#### Required Arguments:
-- `--train-data`: Path to training dataset (parquet format)
-- `--test-data`: Path to test dataset (parquet format) 
-- `--holdout-data`: Path to holdout dataset (parquet format)
-- `--model-type`: Type of model (`randomforest` or `xgboost`)
-- `--study-name`: Name for the Optuna study
-
-#### Optional Arguments:
-- `--target-column`: Name of target column (default: "y")
-- `--optimization-metrics`: Metrics to optimize (default: ["precision"])
-  - Available: accuracy, precision, recall, f1, roc_auc, pr_auc
-- `--optimization-direction`: Direction of optimization (default: "maximize")
-- `--storage-url`: Database URL for Optuna storage (default: "sqlite:///optuna_study.db")
-- `--n-trials`: Number of optimization trials (default: 100)
-- `--timeout`: Timeout in seconds
-- `--mlflow-uri`: MLflow tracking URI (default: "sqlite:///mlflow.db")
-- `--experiment-name`: MLflow experiment name (auto-generated if not provided)
-- `--random-state`: Random state for reproducibility (default: 42)
-- `--project-name`: Project name for MLflow tags
-- `--dataset-version`: Dataset version for MLflow tags
-
-### Example with All Options:
 ```bash
 python hyperparameter_optimizer.py \
     --train-data datasets/train.parquet \
@@ -112,236 +174,532 @@ python hyperparameter_optimizer.py \
     --holdout-data datasets/holdout.parquet \
     --target-column y \
     --model-type randomforest \
-    --optimization-metrics precision recall f1 \
+    --optimization-metrics precision recall \
     --optimization-direction maximize \
-    --study-name comprehensive_rf_study \
-    --storage-url sqlite:///studies.db \
+    --study-name rf_precision_recall \
+    --n-trials 200 \
+    --experiment-name "RF_Multi_Objective"
+```
+
+### 3. Viewing Results
+
+**Start MLflow UI:**
+
+```bash
+mlflow ui --backend-store-uri sqlite:///mlflow.db
+```
+
+Open http://localhost:5000 in your browser.
+
+**In MLflow UI:**
+- **Experiments**: View all optimization runs
+- **Runs**: Compare metrics across trials
+- **Artifacts**: Download models, plots, and feature importance files
+- **Metrics**: Sort by accuracy, precision, F1, etc.
+- **Parameters**: See hyperparameter values for each trial
+
+**Command-line queries:**
+
+```bash
+# List all experiments
+mlflow experiments list --tracking-uri sqlite:///mlflow.db
+
+# Get best run for an experiment
+mlflow runs list --experiment-name "RF_Precision_F1_Optimization" \
+    --sort-by "metrics.final_test_f1 DESC" --max-results 1
+```
+
+### 4. Model Deployment
+
+**Extract best model:**
+
+```bash
+# Find best run ID from MLflow UI or CLI
+export RUN_ID="abc123..."
+
+# Download model artifact
+mlflow artifacts download \
+    --run-id $RUN_ID \
+    --artifact-path "model" \
+    --dst-path ./best_model/
+```
+
+**Extract model schema for inference:**
+
+```bash
+python ../ml/schema_extractor.py \
+    --model-path best_model/model.pkl \
+    --training-data datasets/train.parquet \
+    --output-schema best_model/model_schema.json
+```
+
+**Use model for predictions:**
+
+```bash
+# Via FLYNC CLI (recommended)
+flync run-ml \
+    --gtf new_transcripts.gtf \
+    --output predictions.csv \
+    --ref-genome genome.fa \
+    --model best_model/model.pkl
+
+# Or via Python
+python -c "
+from flync.ml.predictor import predict_from_features
+predict_from_features(
+    'new_features.parquet',
+    'best_model/model.pkl',
+    'predictions.csv'
+)
+"
+```
+
+---
+
+## Command Reference
+
+### hyperparameter_optimizer.py
+
+**Required Arguments:**
+- `--train-data`: Path to training dataset (parquet)
+- `--test-data`: Path to validation dataset (parquet)
+- `--holdout-data`: Path to final holdout dataset (parquet)
+- `--model-type`: Model type (`randomforest` or `xgboost`)
+- `--study-name`: Optuna study name (for resumability)
+
+**Optional Arguments:**
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--target-column` | `"y"` | Name of target/label column |
+| `--optimization-metrics` | `["precision"]` | Metrics to optimize (see list below) |
+| `--optimization-direction` | `"maximize"` | `maximize` or `minimize` |
+| `--n-trials` | `100` | Number of optimization trials |
+| `--timeout` | `None` | Timeout in seconds |
+| `--storage-url` | `"sqlite:///optuna_study.db"` | Optuna database URL |
+| `--mlflow-uri` | `"sqlite:///mlflow.db"` | MLflow tracking URI |
+| `--experiment-name` | Auto-generated | MLflow experiment name |
+| `--random-state` | `42` | Random seed for reproducibility |
+| `--project-name` | `None` | Project name for MLflow tags |
+| `--dataset-version` | `None` | Dataset version for MLflow tags |
+
+**Available Optimization Metrics:**
+- `accuracy` - Overall accuracy
+- `precision` - Precision (positive predictive value)
+- `recall` - Recall (sensitivity, true positive rate)
+- `f1` - F1 score (harmonic mean of precision and recall)
+- `roc_auc` - Area under ROC curve
+- `pr_auc` - Area under precision-recall curve
+
+**Examples:**
+
+```bash
+# Basic usage with defaults
+python hyperparameter_optimizer.py \
+    --train-data train.parquet \
+    --test-data test.parquet \
+    --holdout-data holdout.parquet \
+    --model-type randomforest \
+    --study-name my_study
+
+# Advanced usage with custom settings
+python hyperparameter_optimizer.py \
+    --train-data train.parquet \
+    --test-data test.parquet \
+    --holdout-data holdout.parquet \
+    --model-type xgboost \
+    --optimization-metrics roc_auc pr_auc f1 \
+    --study-name xgb_multi_metric \
     --n-trials 200 \
     --timeout 7200 \
-    --mlflow-uri sqlite:///experiments.db \
-    --experiment-name "Comprehensive_RF_Study" \
-    --random-state 42 \
-    --project-name "Binary Classification Project" \
+    --storage-url postgresql://user:pass@localhost/optuna \
+    --mlflow-uri http://mlflow-server:5000 \
+    --experiment-name "XGB_Production_v2" \
+    --project-name "lncRNA_Discovery" \
     --dataset-version "v2.1"
 ```
 
-## File Structure
+---
 
+## Optimization Details
+
+### Hyperparameter Search Spaces
+
+**RandomForest:**
+```python
+{
+    'n_estimators': (50, 1000),          # Log scale
+    'max_depth': (3, 50),                # Integer
+    'min_samples_split': (0.01, 1.0),   # Float
+    'min_samples_leaf': (0.01, 0.5),    # Float
+    'max_features': ['sqrt', 'log2', None],
+    'bootstrap': [True, False],
+    'class_weight': [None, 'balanced', 'balanced_subsample'],
+    'criterion': ['gini', 'entropy']
+}
 ```
-├── hyperparameter_optimizer.py    # Main optimization script
-├── prepare_data.py                # Data preparation utility
-├── requirements.txt               # Python dependencies
-├── Makefile                       # Build automation
-├── README.md                      # This file
-├── examples/                      # Example and demo scripts
-│   ├── demo.py                    # Interactive demo
-│   ├── feature_importance_demo.py # Feature importance demo
-│   ├── stratification_examples.py # Stratification examples
-│   ├── run_optimization.py       # Simple run script
-│   ├── comparison.py              # Model comparison utilities
-│   └── config_example.py          # Configuration example
-└── tests/                         # Test scripts
-    ├── test_feature_importance.py # Feature importance tests
-    └── test_stratification.py     # Stratification tests
+
+**XGBoost:**
+```python
+{
+    'n_estimators': (50, 1500),          # Log scale
+    'learning_rate': (1e-4, 0.3),       # Log scale
+    'max_depth': (3, 12),               # Integer
+    'min_child_weight': (1, 20),        # Integer
+    'gamma': (0.0, 1.0),                # Float
+    'subsample': (0.5, 1.0),            # Float
+    'colsample_bytree': (0.5, 1.0),     # Float
+    'reg_alpha': (1e-8, 10.0),          # Log scale (L1)
+    'reg_lambda': (1e-8, 10.0),         # Log scale (L2)
+    'scale_pos_weight': (1.0, 20.0)     # Class imbalance
+}
 ```
 
-## Output Files
+### Optimization Process
 
-The tool creates several output files:
+For each trial:
 
-- `optuna_study.db`: Optuna study database (persistent)
-- `mlflow.db`: MLflow tracking database
-- `mlruns/`: MLflow artifacts directory
-- `hyperparameter_optimization.log`: Detailed log file
-- `feature_importances.png`: Feature importance plot
-- `feature_importances.csv`: Feature importance data
+1. **Sample Hyperparameters**: Optuna samples from search space
+2. **Train Model**: Fit model on training data
+3. **Validation**: Evaluate on validation (test) data
+4. **Metric Calculation**: Compute all specified metrics
+5. **Feature Importance**: Extract and log feature importances
+6. **Logging**: Save metrics, params, and artifacts to MLflow
+7. **Objective Score**: Return metric(s) for optimization
 
-## Testing and Examples
+**Multi-Objective Optimization:**
+- When multiple metrics specified, Optuna uses non-dominated sorting
+- Returns Pareto-optimal solutions
+- View tradeoffs in Optuna visualizations
 
-The optimizer includes comprehensive testing and example scripts:
+### Resume Capability
+
+Optuna studies are persistent - you can resume interrupted optimizations:
 
 ```bash
-# Run stratification feature tests
-make test-stratification
-
-# Run interactive stratification examples
-make stratification-demo
-
-# Test feature importance functionality
-make test-features
-
-# Run interactive demo
-make demo
-
-# Run feature importance demo
-make feature-demo
-```
-
-## Advanced Usage
-
-### Resuming Studies
-
-Optuna studies are persistent and can be resumed:
-
-```bash
-# Run initial optimization
+# Initial run (completes 50 trials)
 python hyperparameter_optimizer.py \
     --study-name my_study \
     --n-trials 50 \
     [other args...]
 
-# Resume with more trials
+# Resume with more trials (same study name!)
 python hyperparameter_optimizer.py \
-    --study-name my_study \  # Same study name
-    --n-trials 100 \         # Additional trials
+    --study-name my_study \
+    --n-trials 100 \
     [same other args...]
 ```
 
+The study will continue from trial 51.
+
+---
+
+## Output Files
+
+### MLflow Artifacts
+
+Logged for **every trial**:
+- `feature_importances_trial_N.png` - Feature importance plot with percentages
+- `feature_importances_trial_N.csv` - Feature importance data
+- `roc_curve_trial_N.png` - ROC curve on validation data
+- `pr_curve_trial_N.png` - Precision-recall curve
+
+Logged for **final holdout evaluation** (best model):
+- `feature_importances_final.png` - Final feature importance plot
+- `feature_importances_final.csv` - Final feature importance data
+- `roc_curve_final.png` - ROC curve on holdout data
+- `pr_curve_final.png` - PR curve on holdout data
+- `model/` - Serialized trained model
+
+### Optuna Visualizations
+
+Generated during optimization:
+- `optimization_history_<model>.png` - Objective value over trials
+- `param_importances_<model>.png` - Parameter importance
+- `optimization_stability_<model>.png` - Feature importance stability
+
+### Databases
+
+- **`optuna_study.db`**: Optuna study database (SQLite by default)
+  - Contains all trials, parameters, and intermediate values
+  - Persistent across runs
+  - Can be PostgreSQL/MySQL for production
+
+- **`mlflow.db`**: MLflow tracking database (SQLite by default)
+  - Contains experiments, runs, metrics, parameters
+  - Artifacts stored in `mlruns/` directory
+  - Can be remote server for team collaboration
+
+### Log Files
+
+- **`hyperparameter_optimization.log`**: Detailed execution log
+  - All INFO, WARNING, ERROR messages
+  - Timestamps for debugging
+  - Trial-by-trial progress
+
+---
+
+## Advanced Usage
+
 ### Custom Storage Backends
 
-#### PostgreSQL:
+**PostgreSQL (recommended for production):**
+
 ```bash
---storage-url "postgresql://user:password@localhost/optuna_db"
+# Setup database
+createdb optuna_db
+createdb mlflow_db
+
+# Run optimization
+python hyperparameter_optimizer.py \
+    --storage-url postgresql://user:password@localhost/optuna_db \
+    --mlflow-uri postgresql://user:password@localhost/mlflow_db \
+    [other args...]
 ```
 
-#### MySQL:
+**MySQL:**
+
 ```bash
---storage-url "mysql://user:password@localhost/optuna_db"
+python hyperparameter_optimizer.py \
+    --storage-url mysql://user:password@localhost/optuna_db \
+    --mlflow-uri mysql://user:password@localhost/mlflow_db \
+    [other args...]
 ```
 
-### Remote MLflow Tracking:
+**Remote MLflow server:**
+
 ```bash
---mlflow-uri "http://your-mlflow-server:5000"
+# Start MLflow server on remote machine
+mlflow server --host 0.0.0.0 --port 5000
+
+# Point optimizer to remote server
+python hyperparameter_optimizer.py \
+    --mlflow-uri http://remote-server:5000 \
+    [other args...]
 ```
 
-## Hyperparameter Search Spaces
+### Distributed Optimization
 
-### RandomForest:
-- `n_estimators`: 50-1000 (log scale)
-- `max_depth`: 3-50
-- `min_samples_split`: 0.01-1.0
-- `min_samples_leaf`: 0.01-0.5
-- `max_features`: ["sqrt", "log2", None]
-- `bootstrap`: [True, False]
-- `class_weight`: [None, "balanced", "balanced_subsample"]
-- `criterion`: ["gini", "entropy"]
+Run multiple workers in parallel (same study):
 
-### XGBoost:
-- `n_estimators`: 50-1500 (log scale)
-- `learning_rate`: 1e-4 to 0.3 (log scale)
-- `max_depth`: 3-12
-- `min_child_weight`: 1-20
-- `gamma`: 0.0-1.0
-- `subsample`: 0.5-1.0
-- `colsample_bytree`: 0.5-1.0
-- `reg_alpha`: 1e-8 to 10.0 (log scale)
-- `reg_lambda`: 1e-8 to 10.0 (log scale)
-- `scale_pos_weight`: 1.0-20.0
+```bash
+# Terminal 1
+python hyperparameter_optimizer.py \
+    --study-name shared_study \
+    --n-trials 50 \
+    --storage-url postgresql://localhost/optuna \
+    [other args...]
 
-## Visualization and Analysis
-
-The tool automatically generates:
-
-1. **Enhanced MLflow Artifacts**:
-   - PR curves for validation and final holdout
-   - ROC curves for validation and final holdout
-   - **Advanced feature importance plots** with both absolute values and percentages
-   - Feature importance CSV files with percentage calculations
-   - **Trial-specific feature importance tracking** for every optimization trial
-
-2. **Feature Importance Analysis**:
-   - **Dual visualization**: Absolute importance values and percentage contributions
-   - **Top feature metrics**: Logged to MLflow for easy comparison across trials
-   - **Cumulative importance**: Shows percentage covered by top 5 and top 10 features
-   - **Value labels**: Precise importance values displayed on each bar
-   - **Stability tracking**: Optimization convergence analysis across trials
-
-3. **Optuna Visualizations**:
-   - Optimization history
-   - Parameter importance
-   - Slice plots
-   - **Feature stability plots**: Show how optimization converges over trials
-
-4. **Comprehensive Metrics Tracking**:
-   - All standard classification metrics
-   - Custom optimization scores
-   - **Feature importance metrics**: Top features tracked as MLflow metrics
-   - Trial-by-trial comparisons with feature importance evolution
-
-## Enhanced Feature Importance Analysis
-
-### What's New in Feature Importance:
-
-The enhanced feature importance analysis provides comprehensive insights into model behavior:
-
-#### **Dual Visualization Approach**
-- **Left plot**: Absolute importance values for precise numerical comparison
-- **Right plot**: Percentage contributions showing relative importance
-- **Value labels**: Exact values displayed on each bar for accuracy
-
-#### **Comprehensive Data Export**
-```csv
-feature,importance,percentage
-feature_01,0.1234,15.67%
-feature_05,0.0987,12.34%
-...
+# Terminal 2 (same study name and storage!)
+python hyperparameter_optimizer.py \
+    --study-name shared_study \
+    --n-trials 50 \
+    --storage-url postgresql://localhost/optuna \
+    [other args...]
 ```
 
-#### **MLflow Integration**
-- **Top feature metrics**: Automatically logged for easy comparison
-- **Cumulative percentages**: Track how many features explain most variance
-- **Feature names as tags**: Searchable in MLflow UI
-- **Trial-specific tracking**: See how feature importance evolves
+Optuna coordinates trials across workers automatically.
 
-#### **Example MLflow Metrics Logged**:
+### Batch Optimization
+
+Compare multiple configurations:
+
+```bash
+# Create configuration file
+cat > optimization_configs.yaml << EOF
+experiments:
+  - name: "RF_Precision"
+    model_type: randomforest
+    metrics: [precision]
+    trials: 100
+  
+  - name: "RF_F1"
+    model_type: randomforest
+    metrics: [f1]
+    trials: 100
+  
+  - name: "XGB_AUC"
+    model_type: xgboost
+    metrics: [roc_auc]
+    trials: 150
+EOF
+
+# Run batch optimization (if batch_optimization.py supports config files)
+python batch_optimization.py --config optimization_configs.yaml
 ```
-trial_top_1_feature_importance: 0.1234
-trial_top_1_feature_percentage: 15.67
-trial_top_5_cumulative_percentage: 67.89
-final_top_1_feature_importance: 0.1456
-final_top_10_cumulative_percentage: 89.23
+
+### Feature Importance Analysis
+
+**Extract top features across all trials:**
+
+```python
+import mlflow
+import pandas as pd
+
+# Connect to MLflow
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
+experiment = mlflow.get_experiment_by_name("My_Experiment")
+
+# Get all runs
+runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
+
+# Extract top feature metrics
+top_features = runs[[
+    'metrics.trial_top_1_feature_importance',
+    'metrics.trial_top_5_cumulative_percentage',
+    'tags.trial_top_1_feature_name'
+]].sort_values('metrics.trial_top_1_feature_importance', ascending=False)
+
+print(top_features.head(10))
 ```
 
-#### **Files Generated Per Trial**:
-- `feature_importances_trial_N.png` - Enhanced dual plot
-- `feature_importances_trial_N.csv` - Data with percentages
-- `feature_importances_final.png` - Final model analysis
-- `optimization_stability_modeltype.png` - Convergence analysis
+**Stability analysis:**
 
-### **Usage in Analysis**:
-1. **Compare trials**: See which trials found similar important features
-2. **Track stability**: Identify if optimization is converging on consistent features
-3. **Model interpretation**: Understand what drives your model's decisions
-4. **Feature selection**: Identify candidates for feature reduction
+```python
+import matplotlib.pyplot as plt
+
+# Plot feature importance convergence
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.plot(runs['metrics.trial_number'], 
+        runs['metrics.trial_top_1_feature_importance'])
+ax.set_xlabel('Trial')
+ax.set_ylabel('Top Feature Importance')
+ax.set_title('Feature Importance Stability')
+plt.savefig('feature_stability.png')
+```
+
+---
 
 ## Troubleshooting
 
-### Common Issues:
+### Common Issues
 
-1. **Missing Dependencies**: Install all requirements with `pip install -r requirements.txt`
+**Problem**: `sqlite3.OperationalError: database is locked`
+```bash
+# Solution 1: Use PostgreSQL instead of SQLite for concurrent access
+--storage-url postgresql://localhost/optuna_db
 
-2. **Memory Issues**: Reduce `--n-trials` or use smaller datasets
+# Solution 2: Ensure no other processes are using the database
+lsof optuna_study.db  # Check what's using it
+```
 
-3. **Database Locked**: Ensure no other processes are using the Optuna database
+**Problem**: Memory error during training
+```bash
+# Solution 1: Reduce number of estimators in search space
+# Edit hyperparameter_optimizer.py and reduce n_estimators max
 
-4. **MLflow Port Conflict**: Use different port with `mlflow ui --port 5001`
+# Solution 2: Reduce dataset size
+python prepare_data.py --train-size 0.5  # Use 50% instead of 70%
 
-### Logging:
+# Solution 3: Use fewer features
+# Filter features before optimization
+```
 
-Check `hyperparameter_optimization.log` for detailed execution logs.
+**Problem**: MLflow port already in use
+```bash
+# Solution: Use different port
+mlflow ui --port 5001
+
+# Or kill process using port 5000
+lsof -ti:5000 | xargs kill -9
+```
+
+**Problem**: Optimization very slow
+```bash
+# Solution 1: Reduce number of trials
+--n-trials 50  # Instead of 100
+
+# Solution 2: Use timeout instead
+--timeout 3600  # 1 hour
+
+# Solution 3: Simplify search space
+# Edit hyperparameter_optimizer.py to reduce parameter ranges
+
+# Solution 4: Use smaller validation set
+# Create smaller test.parquet
+```
+
+**Problem**: No improvement after many trials
+```bash
+# Solution 1: Check data quality
+# Ensure features are informative and labels are correct
+
+# Solution 2: Try different model type
+--model-type xgboost  # If RandomForest not working
+
+# Solution 3: Add more features
+# Extract additional genomic features
+
+# Solution 4: Adjust search space
+# Expand ranges for hyperparameters that seem important
+```
+
+**Problem**: Feature importance plots missing
+```bash
+# Solution: Ensure matplotlib backend is set
+export MPLBACKEND=Agg
+python hyperparameter_optimizer.py [args...]
+
+# Or install required dependencies
+conda install matplotlib seaborn
+```
+
+### Debug Mode
+
+Enable verbose logging:
+
+```bash
+# Set log level in script or via environment
+export FLYNC_LOG_LEVEL=DEBUG
+python hyperparameter_optimizer.py [args...]
+
+# Or edit hyperparameter_optimizer.py:
+# logging.basicConfig(level=logging.DEBUG)
+```
+
+Check logs:
+```bash
+tail -f hyperparameter_optimization.log
+```
+
+---
 
 ## Performance Tips
 
-1. **Start Small**: Begin with fewer trials (50-100) to validate setup
-2. **Use Persistent Storage**: Always use database storage for Optuna studies
-3. **Monitor Resources**: Watch memory and CPU usage during optimization
-4. **Parallel Trials**: For large datasets, consider distributed Optuna
-5. **Early Stopping**: Use timeout parameter for time-bounded optimization
+1. **Start Small**: Begin with 50-100 trials to validate setup
+2. **Use Persistent Storage**: Always use database (not in-memory) for Optuna
+3. **Monitor Resources**: Watch CPU and memory during optimization
+4. **Stratified Splits**: Ensure balanced classes in train/val/test
+5. **Feature Selection**: Remove low-importance features before optimization
+6. **Early Stopping**: Use timeout for time-bounded optimization
+7. **Distributed Workers**: Run multiple workers for faster completion
+8. **Cache Features**: Pre-extract features once, reuse for multiple experiments
 
-## Contributing
+---
 
-Feel free to submit issues and enhancement requests!
+## Integration with FLYNC
 
-## License
+This module integrates with the main FLYNC pipeline:
 
-This project is available under the MIT License.
+```bash
+# 1. Extract features using FLYNC
+flync run-ml --gtf transcripts.gtf --extract-only --output features.parquet
+
+# 2. Train custom model (this module)
+python prepare_data.py --positive-file lncrna_features.parquet ...
+python hyperparameter_optimizer.py --train-data train.parquet ...
+
+# 3. Deploy model back to FLYNC
+flync run-ml --gtf new_transcripts.gtf --model best_model.pkl --output predictions.csv
+```
+
+---
+
+**Module**: `src/flync/optimizer/`  
+**Last Updated**: November 2025  
+**Version**: 1.0.0
+
+For more information, see:
+- Main documentation: [../../README.md](../../README.md)
+- Feature extraction: [../features/README.md](../features/README.md)
+- ML prediction: [../ml/README.md](../ml/README.md) (if exists)

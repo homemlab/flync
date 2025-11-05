@@ -1,20 +1,46 @@
-# Feature Pipeline - Genomic Feature Extraction & Preparation
+# FLYNC Feature Extraction Pipeline
 
-This pipeline provides a comprehensive, two-stage workflow for lncRNA/transcript classification:
+Comprehensive genomic feature extraction and preparation for lncRNA classification.
 
-1.  **Feature Extraction** (`feature_wrapper.py`) - Extract genomic features from GTF annotations
-2.  **Feature Preparation** (`feature_cleaning.py`) - Clean and prepare features for ML models
+This module provides a two-stage workflow for preparing transcripts for machine learning classification:
+
+1. **Feature Extraction** (`feature_wrapper.py`) - Extract multi-modal genomic features from GTF annotations
+2. **Feature Cleaning** (`feature_cleaning.py`) - Clean, standardize, and prepare features for ML models
+
+---
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Pipeline Overview](#pipeline-overview)
+- [Part 1: Feature Extraction](#part-1-feature-extraction)
+  - [Usage Examples](#1a-usage-examples)
+  - [Command Reference](#1b-command-reference)
+  - [Feature Details](#1c-feature-details--advanced-features)
+  - [BigWig Configuration](#1d-bigwigbigbed-configuration)
+  - [Python API](#1e-python-api-extraction)
+- [Part 2: Feature Cleaning](#part-2-feature-cleaning)
+  - [Usage Examples](#2a-usage-examples)
+  - [Command Reference](#2b-command-reference)
+  - [Data Cleaning Details](#2c-data-cleaning-details)
+  - [Python API](#2d-python-api-cleaning)
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+
 
 ## Quick Start
 
-Full pipeline from GTF to model-ready training data:
+**Complete pipeline from GTF to model-ready features:**
 
 ```bash
-# Step 1: Extract features from GTF
+# Step 1: Extract raw features from GTF
 python feature_wrapper.py all \
     --gtf annotations.gtf \
     --ref-genome genome.fa \
-    --bwq-config tracks.yaml \
+    --bwq-config bwq_config.yaml \
     --use-dim-redux --redux-n-components 1 \
     --use-tfidf --sparse \
     --output raw_features.parquet
@@ -29,6 +55,29 @@ python feature_cleaning.py \
     --scaler standard \
     --enable-multi-hot \
     --scaler-path model_data/scaler.pkl
+```
+
+**For inference (using pre-trained model):**
+
+```bash
+# Extract features with same transformations as training
+python feature_wrapper.py all \
+    --gtf new_transcripts.gtf \
+    --ref-genome genome.fa \
+    --bwq-config bwq_config.yaml \
+    --use-dim-redux --redux-n-components 1 \
+    --use-tfidf --sparse \
+    --output inference_features.parquet
+
+# Align with model schema and apply saved scaler
+python feature_cleaning.py \
+    --mode inference \
+    --dataset inference_features.parquet \
+    --output-dir inference_data/ \
+    --split-suffix "inference" \
+    --metadata-path model/flync_model_schema.json \
+    --scaler-path model_data/scaler.pkl \
+    --scaler standard
 ````
 
 -----
