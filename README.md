@@ -159,6 +159,7 @@ Choose an installation method based on what you need:
 | Programmatic Snakemake orchestration (no bio tools) | pip minimal + workflow | `pip install flync[workflow]` |
 | Reproducible container execution | Docker (runtime) | `docker pull ghcr.io/homemlab/flync:latest` |
 | Faster startup with pre-cached tracks | Docker (prewarmed) | `docker pull ghcr.io/homemlab/flync:latest-prewarmed` |
+| Automatic versioning (tag-driven) | Git tag (setuptools-scm) | `git tag v1.0.3 && git push --tags` |
 
 ### Option 1: Conda (Recommended – Full Stack)
 
@@ -239,6 +240,11 @@ cd flync
 conda env create -f environment.yml
 conda activate flync
 pip install -e .
+
+# Version bump: create and push a new tag (setuptools-scm derives Python version)
+# Example for next release:
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 ### Prerequisites
@@ -1084,6 +1090,57 @@ docker system prune -a
 # Check disk usage
 docker system df
 ```
+
+---
+
+## Versioning & Release Process
+
+FLYNC uses `setuptools-scm` for automatic versioning. The published Python package version is derived from the latest Git tag matching the pattern:
+
+```
+vX.Y.Z   # e.g. v1.0.3
+```
+
+Internally, `setuptools-scm` strips the leading `v` and records the version as `X.Y.Z`. If you build from a commit without a matching tag, a fallback/local version like `0.0.0+<hash>` is used (not recommended for production artifacts).
+
+### Cutting a Release (PyPI + Conda + Docker)
+1. Ensure master is clean and tests (when present) pass.
+2. Decide new semantic version (follow MAJOR.MINOR.PATCH).
+3. Create annotated tag (recommended):
+  ```bash
+  git tag -a v1.0.3 -m "Release v1.0.3"
+  git push --tags
+  ```
+4. GitHub Actions obtains the tag and `setuptools-scm` sets the Python package version automatically.
+5. Conda build job injects the same version via the `FLYNC_BUILD_VERSION` environment variable into both recipes (`flync`, `flync-dge`).
+6. Docker images are tagged `ghcr.io/homemlab/flync:latest` and may additionally include the version tag (workflow dependent).
+7. Verify the published version:
+  ```bash
+  pip install flync==1.0.3
+  conda search -c bioconda flync | grep 1.0.3
+  ```
+
+### Tagging Rules
+- Always prefix with `v` (e.g., `v1.2.0`) for consistency.
+- Never force-push tags; create a new patch version instead if you must fix packaging.
+- Keep CHANGELOG (future enhancement) aligned with tags.
+
+### Local Version Check
+From a development checkout without a tag:
+```bash
+python -c "import flync, importlib.metadata as im; print(im.version('flync'))"
+```
+Expect a local version suffix; add a tag to finalize.
+
+### Why Tag-Driven?
+- Eliminates manual version edits in `pyproject.toml` and Conda recipes.
+- Guarantees all distribution channels (PyPI, Conda, Docker) share a single source of truth.
+- Simplifies automated release workflows.
+
+### Next Improvements
+- Add automated CHANGELOG generation on tag.
+- CI check to fail if tag regex mismatch occurs.
+- Optional version-specific Docker image tags.
 
 ---
 

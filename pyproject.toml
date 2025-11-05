@@ -1,6 +1,7 @@
 [project]
 name = "flync"
-version = "1.0.2"
+# Version is now derived automatically from git tags via setuptools-scm.
+# Remove static 'version =' to avoid manual bumps; tags like 'v1.0.3' produce version '1.0.3'.
 description = "FLYNC: lncRNA discovery pipeline for Drosophila melanogaster"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -68,8 +69,15 @@ all = [
 flync = "flync.cli:main"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+# Support tags with optional leading 'v', e.g. v1.0.2
+tag_regex = "^(?:v)?(?P<version>\d+\.\d+\.\d+)$"
+local_scheme = "no-local-version"  # Avoid +dirty or local hash for release artifacts
+write_to = "src/flync/_version.py"
+fallback_version = "0.0.0"  # Used only if no git metadata available (e.g. sdist without .git)
 
 [tool.setuptools.packages.find]
 where = ["src"]

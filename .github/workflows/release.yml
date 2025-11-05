@@ -98,26 +98,40 @@ jobs:
       - name: Build conda package
         shell: bash -l {0}
         run: |
-          EXPECTED_PATH=$(conda build conda-recipe --output)
-          echo "Expected artifact path: ${EXPECTED_PATH}"
-          conda build conda-recipe --output-folder conda-bld/
-          if [ ! -f "${EXPECTED_PATH}" ]; then
-            echo "Conda build completed but artifact not found at expected path." >&2
-            echo "Listing conda-bld directory for diagnostics:" >&2
-            find conda-bld -maxdepth 3 -type f -name '*.tar.bz2' -print || true
-            exit 1
+          # Build base package (use default conda-bld root to keep --output path valid)
+          BASE_EXPECTED=$(conda build conda-recipe --output)
+          echo "Planned base artifact path (default root): ${BASE_EXPECTED}"
+          conda build conda-recipe || { echo "Base package build failed" >&2; exit 1; }
+          # Verify base artifact (support both .conda and .tar.bz2)
+          if [ -f "${BASE_EXPECTED}" ]; then
+            echo "Base artifact found at ${BASE_EXPECTED}"
+            BASE_FINAL="${BASE_EXPECTED}"
+          else
+            echo "Primary expected base artifact not found; searching fallback locations" >&2
+            BASE_FINAL=$(find $(conda info --base)/conda-bld -maxdepth 3 -type f \( -name 'flync-*.conda' -o -name 'flync-*.tar.bz2' \) | sort | tail -n1 || true)
+            if [ -z "${BASE_FINAL}" ]; then
+              echo "No base artifact discovered in fallback search" >&2; exit 1;
+            fi
+            echo "Using discovered base artifact: ${BASE_FINAL}"
           fi
-          echo "Artifact verified at ${EXPECTED_PATH}"
-          # Build DGE add-on package
-          EXPECTED_DGE_PATH=$(conda build conda-recipe-dge --output)
-          echo "Expected DGE artifact path: ${EXPECTED_DGE_PATH}"
-          conda build conda-recipe-dge --output-folder conda-bld/
-          if [ ! -f "${EXPECTED_DGE_PATH}" ]; then
-            echo "DGE build completed but artifact not found at expected path." >&2
-            find conda-bld -maxdepth 3 -type f -name '*.tar.bz2' -print || true
-            exit 1
+          echo "BASE_ARTIFACT=${BASE_FINAL}" >> $GITHUB_ENV
+
+          # Build DGE add-on (depends on base)
+          DGE_EXPECTED=$(conda build conda-recipe-dge --output)
+          echo "Planned DGE artifact path (default root): ${DGE_EXPECTED}"
+          conda build conda-recipe-dge || { echo "DGE package build failed" >&2; exit 1; }
+          if [ -f "${DGE_EXPECTED}" ]; then
+            echo "DGE artifact found at ${DGE_EXPECTED}"
+            DGE_FINAL="${DGE_EXPECTED}"
+          else
+            echo "Primary expected DGE artifact not found; searching fallback locations" >&2
+            DGE_FINAL=$(find $(conda info --base)/conda-bld -maxdepth 3 -type f \( -name 'flync-dge-*.conda' -o -name 'flync-dge-*.tar.bz2' \) | sort | tail -n1 || true)
+            if [ -z "${DGE_FINAL}" ]; then
+              echo "No DGE artifact discovered in fallback search" >&2; exit 1;
+            fi
+            echo "Using discovered DGE artifact: ${DGE_FINAL}"
           fi
-          echo "DGE artifact verified at ${EXPECTED_DGE_PATH}"
+          echo "DGE_ARTIFACT=${DGE_FINAL}" >> $GITHUB_ENV
 
       - name: Upload conda package
         shell: bash -l {0}
@@ -125,33 +139,28 @@ jobs:
         env:
           ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
         run: |
-          PACKAGE_PATH=$(conda build conda-recipe --output)
-          echo "Uploading artifact: ${PACKAGE_PATH}" || exit 1
-          anaconda upload --skip-existing "${PACKAGE_PATH}" || {
-            echo "Primary upload failed; attempting fallback search." >&2
-            FALLBACK=$(find conda-bld -maxdepth 3 -type f -name '*.tar.bz2' | head -n1 || true)
+          echo "Uploading base artifact: ${BASE_ARTIFACT}" || exit 1
+          anaconda upload --skip-existing "${BASE_ARTIFACT}" || {
+            echo "Base upload failed; performing expanded search" >&2
+            FALLBACK=$(find $(conda info --base)/conda-bld -maxdepth 3 -type f \( -name 'flync-*.conda' -o -name 'flync-*.tar.bz2' \) | sort | tail -n1 || true)
             if [ -n "${FALLBACK}" ]; then
-              echo "Retrying with fallback artifact: ${FALLBACK}" >&2
+              echo "Retrying base upload with: ${FALLBACK}" >&2
               anaconda upload --skip-existing "${FALLBACK}" || exit 1
             else
-              echo "No artifact found for upload." >&2
-              exit 1
+              echo "No base artifact found for fallback upload" >&2; exit 1
             fi
           }
-          # Upload DGE add-on
-          DGE_PACKAGE_PATH=$(conda build conda-recipe-dge --output)
-          echo "Uploading DGE artifact: ${DGE_PACKAGE_PATH}" || exit 1
-            anaconda upload --skip-existing "${DGE_PACKAGE_PATH}" || {
-              echo "Primary DGE upload failed; attempting fallback search." >&2
-              FALLBACK_DGE=$(find conda-bld -maxdepth 3 -type f -name 'flync-dge*.tar.bz2' | head -n1 || true)
-              if [ -n "${FALLBACK_DGE}" ]; then
-                echo "Retrying with fallback DGE artifact: ${FALLBACK_DGE}" >&2
-                anaconda upload --skip-existing "${FALLBACK_DGE}" || exit 1
-              else
-                echo "No DGE artifact found for upload." >&2
-                exit 1
-              fi
-            }
+          echo "Uploading DGE artifact: ${DGE_ARTIFACT}" || exit 1
+          anaconda upload --skip-existing "${DGE_ARTIFACT}" || {
+            echo "DGE upload failed; performing expanded search" >&2
+            FALLBACK_DGE=$(find $(conda info --base)/conda-bld -maxdepth 3 -type f \( -name 'flync-dge-*.conda' -o -name 'flync-dge-*.tar.bz2' \) | sort | tail -n1 || true)
+            if [ -n "${FALLBACK_DGE}" ]; then
+              echo "Retrying DGE upload with: ${FALLBACK_DGE}" >&2
+              anaconda upload --skip-existing "${FALLBACK_DGE}" || exit 1
+            else
+              echo "No DGE artifact found for fallback upload" >&2; exit 1
+            fi
+          }
 
   # ===========================================================================
   # Build and Push Docker Images
