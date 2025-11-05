@@ -9,14 +9,14 @@ from .predictor import predict_lncrna  # type: ignore  # Avoid circular type ref
 
 
 def _smoke() -> bool:
-	"""Return True if predictor symbol is importable.
+    """Return True if predictor symbol is importable.
 
-	We intentionally avoid executing heavy feature extraction; this runs during
-	conda recipe test import phase to ensure module loads without syntax errors.
-	"""
-	return callable(predict_lncrna)
+    We intentionally avoid executing heavy feature extraction; this runs during
+    conda recipe test import phase to ensure module loads without syntax errors.
+    """
+    return callable(predict_lncrna)
 
 
 if __name__ == "__main__":  # pragma: no cover
-	ok = _smoke()
-	print(f"predict_test smoke={ok}")
+    ok = _smoke()
+    print(f"predict_test smoke={ok}")
