@@ -1729,8 +1729,7 @@ def train_and_evaluate_top_models(
                     model_description = f"Top {i} {model_type} model for {base_model_name}"
                     if dataset_tags:
                         feature_info = []
-                        if "features_cpat" in dataset_tags:
-                            feature_info.append(f"CPAT: {dataset_tags['features_cpat']}")
+                        # Note: CPAT features have been removed from the pipeline
                         if "features_ss" in dataset_tags:
                             feature_info.append(f"SS: {dataset_tags['features_ss']}")
                         if "features_filter" in dataset_tags:

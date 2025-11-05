@@ -643,10 +643,11 @@ def drop_non_feature_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Remove columns that should not be used as features."""
 
     columns_to_drop: List[str] = []
-    columns_to_drop.extend([col for col in df.columns if col.startswith("cpat_")])
+    # Drop secondary structure columns except ss_mfe
     columns_to_drop.extend(
         [col for col in df.columns if col.startswith("ss_") and col != "ss_mfe"]
     )
+    # Drop genomic coordinate columns to prevent data leakage
     columns_to_drop.extend(
         [col for col in ["chromosome", "start", "end"] if col in df.columns]
     )
@@ -663,11 +664,11 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.copy()
 
+    # Fill signal/statistic columns with 0 (missing signal = no signal)
     op1_cols = [
         col
         for col in df.columns
         if col.startswith(("min_", "max_", "mean_", "std_", "sum_", "cov_"))
-        or col.startswith("cpat_")
     ]
     for col in op1_cols:
         missing = df[col].isna().sum()
