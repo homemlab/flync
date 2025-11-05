@@ -1,0 +1,20 @@
+genome: genome/genome.fa
+annotation: genome/genome.gtf
+hisat_index: genome/genome.idx
+splice_sites: genome/genome.ss
+output_dir: nb_out
+threads: 22
+
+# Sample specification - set to null for auto-detection
+samples: null
+
+# Local FASTQ configuration
+fastq_dir: /mnt/d/flync_final_runs/Marques2021_FASTQ/fastq_single_nb
+fastq_paired: false
+
+params:
+  hisat2: -p 22 --dta --dta-cufflinks
+  stringtie_assemble: -p 22
+  stringtie_merge: ''
+  stringtie_quantify: -eB
+  download_threads: 16

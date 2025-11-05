@@ -1,0 +1,126 @@
+# FLYNC Pipeline Configuration
+# 
+# This file configures the complete bioinformatics pipeline for lncRNA discovery.
+# Copy this file and modify it for your specific analysis.
+
+# ============================================================================
+# Sample Metadata
+# ============================================================================
+# Path to file with sample information. Three options supported:
+#
+# Option 1: AUTO-DETECT (simplest - no file needed!)
+#   - Set to null to enable auto-detection
+#   - Configure fastq_dir below
+#   - Sample names are extracted from filenames automatically
+#   - Example filenames:
+#       sample1_1.fastq.gz, sample1_2.fastq.gz → sample1
+#       run_A.fastq.gz → run_A
+#
+# Option 2: Plain text file (for explicit sample list)
+#   - One sample ID per line
+#   - Blank lines and lines starting with # are ignored
+#   - Example (samples.txt):
+#       sample1
+#       sample2
+#       sample3
+#
+# Option 3: CSV file (for downstream differential expression)
+#   - First column: Sample ID (required)
+#   - Additional columns: metadata like condition, replicate (optional)
+#   - Example (samples.csv):
+#       sample_id,condition,replicate
+#       sample1,control,1
+#       sample2,control,2
+#       sample3,treated,1
+#
+# Use Option 1 to auto-detect samples from FASTQ filenames.
+# Use Option 2 if you want to specify which samples to process.
+# Use Option 3 if you plan to do differential expression analysis.
+#
+samples: "test/metadata.csv"
+# For auto-detection, set to null:
+# samples: null
+
+# ============================================================================
+# Input Data Mode
+# ============================================================================
+# Two modes are supported:
+# 
+# 1. SRA Download Mode (default):
+#    Pipeline downloads FASTQ files from NCBI SRA
+#    - Ensure sample IDs in samples file are valid SRA accessions
+#    - Leave fastq_dir commented out or unset
+#    - Example:
+#        samples: "samples.csv"  # Contains SRR1234567, SRR1234568, etc.
+#
+# 2. Local FASTQ Mode:
+#    Pipeline uses existing FASTQ files from a local directory
+#    - Set fastq_dir to the directory containing FASTQ files
+#    - Set fastq_paired to true for paired-end, false for single-end
+#    - File naming conventions:
+#        * Paired-end: {sample}_1.fastq.gz and {sample}_2.fastq.gz
+#        * Single-end: {sample}.fastq.gz
+#    - Sample IDs in samples file must match FASTQ file prefixes
+#    - Or set samples: null for auto-detection
+#    - Example:
+#        samples: null
+#        fastq_dir: "/path/to/fastq/files"
+#        fastq_paired: false
+#
+# Uncomment and configure these for local FASTQ mode:
+# fastq_dir: "/path/to/fastq/files"
+# fastq_paired: false  # true for paired-end, false for single-end
+
+# ============================================================================
+# Reference Genome and Annotation
+# ============================================================================
+genome: "genome/genome.fa"
+annotation: "genome/genome.gtf"
+hisat_index: "genome/genome.idx"
+splice_sites: "genome/genome.ss"
+
+# ============================================================================
+# Output Directory
+# ============================================================================
+output_dir: "results"
+
+# ============================================================================
+# Computational Resources
+# ============================================================================
+threads: 8
+
+# ============================================================================
+# Tool-Specific Parameters
+# ============================================================================
+params:
+  # HISAT2 alignment parameters
+  hisat2: "-p 8 --dta --dta-cufflinks"
+  
+  # StringTie assembly parameters
+  stringtie_assemble: "-p 8"
+  
+  # StringTie merge parameters
+  stringtie_merge: ""
+  
+  # StringTie quantification parameters
+  stringtie_quantify: "-eB"
+  
+  # SRA download threads
+  download_threads: 4
+
+# ============================================================================
+# Advanced Options
+# ============================================================================
+# Feature extraction configuration (for ML pipeline)
+# feature_extraction:
+#   bwq_config: "config/bwq_tracks.yaml"
+#   use_tfidf: true
+#   use_dim_redux: true
+#   redux_n_components: 1
+#   kmer_lengths: [3, 4, 5, 6]
+
+# ML model configuration
+# ml:
+#   model: "src/flync/assets/rf_dm6_lncrna_classifier.model"
+#   scaler: "src/flync/assets/flync_ebm_scaler.pkl"
+#   schema: "src/flync/assets/flync_ebm_model_schema.json"

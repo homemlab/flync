@@ -1,0 +1,58 @@
+# FLYNC Pipeline Configuration - Simple Sample List
+# 
+# Use a plain text file to specify which samples to process.
+# Good for when you don't need metadata for differential expression.
+
+# ============================================================================
+# Sample List - Plain Text Format
+# ============================================================================
+# Just one sample ID per line - no CSV headers needed!
+samples: "test/samples.txt"
+
+# ============================================================================
+# Local FASTQ Files
+# ============================================================================
+fastq_dir: "/path/to/your/fastq/files"
+fastq_paired: true  # Set to false for single-end
+
+# ============================================================================
+# Reference Genome and Annotation
+# ============================================================================
+genome: "genome/genome.fa"
+annotation: "genome/genome.gtf"
+hisat_index: "genome/genome.idx"
+splice_sites: "genome/genome.ss"
+
+# ============================================================================
+# Output Directory
+# ============================================================================
+output_dir: "results"
+
+# ============================================================================
+# Computational Resources
+# ============================================================================
+threads: 8
+
+# ============================================================================
+# Tool-Specific Parameters (optional)
+# ============================================================================
+params:
+  hisat2: "-p 8 --dta --dta-cufflinks"
+  stringtie_assemble: "-p 8"
+  stringtie_merge: ""
+  stringtie_quantify: "-eB"
+
+# ============================================================================
+# Example Sample List (test/samples.txt)
+# ============================================================================
+# If your FASTQ files are:
+#   mysample1_1.fastq.gz, mysample1_2.fastq.gz
+#   mysample2_1.fastq.gz, mysample2_2.fastq.gz
+#   mysample3_1.fastq.gz, mysample3_2.fastq.gz
+#
+# Your samples.txt should contain:
+#   mysample1
+#   mysample2
+#   mysample3
+#
+# No headers, no commas, just sample names!

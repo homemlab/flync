@@ -1,0 +1,27 @@
+name: flync
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version
+  - python=3.10
+
+  # Bioinformatics tools
+  - hisat2>=2.2.1
+  - stringtie>=2.2.1
+  - samtools>=1.17
+  - bedtools>=2.31.0
+  - gffcompare>=0.12.6
+  - gffread>=0.12.7
+  - sra-tools>=3.0.0
+  - pybigwig>=0.3.22
+  - pybedtools>=0.9.1
+  - snakemake-minimal>=7.32.0
+  
+  # Build tools and utilities
+  - pip>=23.0
+  - git>=2.40.0
+
+  # Note: All Python packages are managed via pip in pyproject.toml
+  # Install the package with: pip install -e .

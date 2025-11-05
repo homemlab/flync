@@ -1,0 +1,35 @@
+# Example configuration file for BigWigQuery
+# This file demonstrates how to configure BigWig/BigBed files and statistics
+
+# Each item in the list represents a BigWig/BigBed file to query
+- path: /path/to/your/file1.bigWig  # Path to BigWig file (local or URL)
+  upstream: 1000                    # Optional: bases to extend upstream
+  downstream: 1000                  # Optional: bases to extend downstream
+  stats:                            # List of statistics to calculate
+    - stat: mean                    # Statistic type
+      name: h3k27ac_mean            # Column name in output
+    - stat: max
+      name: h3k27ac_max
+    - stat: coverage
+      name: h3k27ac_coverage
+
+# Another file with different statistics
+- path: https://example.com/file2.bigBed  # Remote BigBed file
+  stats:
+    - stat: coverage
+      name: peaks_coverage
+    - stat: extract_names           # Extract names from BigBed entries
+      name: peak_names
+      name_field_index: 3           # Field index for name (0-based)
+
+# You can add as many files as needed
+- path: /path/to/your/file3.bigWig
+  upstream: 500
+  downstream: 500
+  stats:
+    - stat: mean
+      name: expression_mean
+    - stat: min
+      name: expression_min
+    - stat: sum
+      name: expression_sum
