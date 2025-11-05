@@ -1,6 +1,6 @@
 [project]
 name = "flync"
-version = "1.0.0"
+version = "1.0.1"
 description = "FLYNC: lncRNA discovery pipeline for Drosophila melanogaster"
 readme = "README.md"
 requires-python = ">=3.11"
