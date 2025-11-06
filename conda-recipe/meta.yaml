@@ -11,10 +11,10 @@ source:
 
 build:
   number: 0
-  noarch: python
   script: SETUPTOOLS_SCM_PRETEND_VERSION={{ version }} {{ PYTHON }} -m pip install . -vv
   entry_points:
     - flync = flync.cli:main
+  skip: true  # [not linux]
 
 requirements:
   host:

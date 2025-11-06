@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 import shutil
+import platform
 
 try:
     import importlib.resources as pkg_resources
@@ -628,6 +629,17 @@ def setup(genome_dir, skip_download, build_index):
     Downloads Drosophila melanogaster BDGP6.32 (dm6) genome and annotation
     from Ensembl release 106, then builds HISAT2 indices.
     """
+    # Platform guard: FLYNC currently supports Linux only for native execution
+    if platform.system() != "Linux":
+        click.secho(
+            "✗ FLYNC currently supports Linux-only execution for native setup.\n"
+            "   Please run under a Linux environment or use the published Docker image:",
+            fg="red",
+            bold=True,
+        )
+        click.echo("   docker pull ghcr.io/homemlab/flync:latest")
+        sys.exit(1)
+
     genome_path = Path(genome_dir)
     genome_path.mkdir(parents=True, exist_ok=True)
 
@@ -679,10 +691,14 @@ def download_genome(genome_dir: Path):
     # Concatenate all chromosomes
     click.echo("  Concatenating chromosomes...")
     genome_fa = genome_dir / "genome.fa"
-    with open(genome_fa, "w") as outfile:
+    # Concatenate gzipped FASTA parts in a portable Python way (no reliance on zcat)
+    import gzip
+
+    with open(genome_fa, "wb") as outfile:
         for gz_file in genome_files:
-            subprocess.run(["zcat", gz_file], stdout=outfile, check=True)
-            Path(gz_file).unlink()  # Remove gz file
+            with gzip.open(gz_file, "rb") as part_in:
+                shutil.copyfileobj(part_in, outfile)
+            Path(gz_file).unlink()  # Remove gz file after merging
 
     click.echo("✓ Genome download complete")
 
