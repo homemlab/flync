@@ -6,7 +6,7 @@
 
 Install (conda recommended):
 ```bash
-conda create -n flync -c bioconda -c conda-forge flync
+conda create -n flync -c RFCDSantos flync
 conda activate flync
 ```
 
@@ -153,7 +153,7 @@ Choose an installation method based on what you need:
 
 | Use Case | Recommended Method | Command |
 |----------|-------------------|---------|
-| Full pipeline (alignment + assembly + ML) | Conda (base) | `conda create -n flync -c bioconda -c conda-forge flync` |
+| Full pipeline (alignment + assembly + ML) | Conda (base) | `conda create -n flync -c RFCDSantos flync` |
 | Add differential expression (Ballgown) | Conda add-on | `conda install -n flync flync-dge` |
 | ML / feature extraction only (no aligners) | pip + extras | `pip install flync[features,ml]` |
 | Programmatic Snakemake orchestration (no bio tools) | pip minimal + workflow | `pip install flync[workflow]` |
@@ -164,7 +164,7 @@ Choose an installation method based on what you need:
 ### Option 1: Conda (Recommended – Full Stack)
 
 ```bash
-conda create -n flync -c bioconda -c conda-forge flync
+conda create -n flync -c RFCDSantos flync
 conda activate flync
 flync --help
 ```
@@ -176,7 +176,7 @@ conda install -n flync flync-dge  # after base install
 
 Or install both at once:
 ```bash
-conda create -n flync -c bioconda -c conda-forge flync flync-dge
+conda create -n flync -c RFCDSantos flync flync-dge
 ```
 
 ### Option 2: pip (Python-Only / Lightweight)
@@ -1117,7 +1117,7 @@ Internally, `setuptools-scm` strips the leading `v` and records the version as `
 7. Verify the published version:
   ```bash
   pip install flync==1.0.3
-  conda search -c bioconda flync | grep 1.0.3
+  conda search -c RFCDSantos flync | grep 1.0.3
   ```
 
 ### Tagging Rules
