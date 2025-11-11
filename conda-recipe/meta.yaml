@@ -59,9 +59,16 @@ test:
     - flync.cli
     - flync.features
     - flync.ml
+    - flync.config
+    - flync.assets
   commands:
     - flync --help
     - flync --version
+  source_files:
+    - src/flync/assets/flync_ebm_model.pkl
+    - src/flync/assets/flync_ebm_scaler.pkl
+    - src/flync/assets/flync_ebm_model_schema.json
+    - src/flync/config/bwq_config.yaml
 
 about:
   home: https://github.com/homemlab/flync
