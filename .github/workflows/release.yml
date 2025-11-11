@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Get all tags for setuptools-scm
 
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3
@@ -341,6 +343,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Get all tags for setuptools-scm
       
       - name: Set up Python
         uses: actions/setup-python@v5
