@@ -4,6 +4,8 @@
 
 ## TL;DR (Quick Start)
 
+**Platform**: Linux AMD64/x86_64 only (ARM64/Apple Silicon users: see Docker + Rosetta instructions)
+
 Install (conda recommended):
 ```bash
 conda create -n flync -c RFCDSantos flync
@@ -201,6 +203,8 @@ If you attempt `flync run-bio` without the required external tools, FLYNC will e
 
 ### Option 3: Docker
 
+**Platform Support**: AMD64/x86_64 only (ARM64 not available due to bioinformatics tool limitations)
+
 Runtime image (downloads tracks on demand):
 ```bash
 docker pull ghcr.io/homemlab/flync:latest
@@ -213,15 +217,24 @@ Prewarmed image (tracks pre-cached):
 docker pull ghcr.io/homemlab/flync:latest-prewarmed
 ```
 
+**Mac ARM (Apple Silicon) users**:
+```bash
+# Use Rosetta emulation (automatic, ~20-30% slower)
+docker pull --platform linux/amd64 ghcr.io/homemlab/flync:latest
+docker run --platform linux/amd64 --rm -v $PWD:/work \
+  ghcr.io/homemlab/flync:latest flync --help
+```
+
 ### Which Should I Pick?
 
 | Scenario | Choose |
 |----------|-------|
-| New user, want everything | Conda base (add `flync-dge` if doing DGE) |
+| New user, want everything (Linux AMD64) | Conda base (add `flync-dge` if doing DGE) |
 | HPC / cluster with module rules | Conda (export env YAML for reproducibility) |
 | Notebook exploratory ML only | pip extras (`features,ml`) |
-| CI / workflow integration | Docker runtime image |
-| Need fastest repeated ML runs | Docker prewarmed image |
+| CI / workflow integration (Linux AMD64) | Docker runtime image |
+| Need fastest repeated ML runs (Linux AMD64) | Docker prewarmed image |
+| Mac ARM / Apple Silicon | Docker with `--platform linux/amd64` (Rosetta) |
 
 ### External Tool Summary
 
@@ -250,6 +263,9 @@ git push origin v1.0.3
 ### Prerequisites
 
 - **Operating System**: Linux (tested on Debian/Ubuntu)
+- **Platform Architecture**: AMD64/x86_64 only
+  - ⚠️ **ARM64/Apple Silicon not supported**: Bioinformatics tools (HISAT2, StringTie, R/Bioconductor) lack ARM64 conda builds
+  - Mac ARM users: Use Docker with Rosetta emulation (`--platform linux/amd64`) or cloud-based x86_64 systems
 - **Conda/Mamba**: Required for managing dependencies
 - **System Requirements**:
   - 8+ GB RAM (16+ GB recommended for large datasets)
