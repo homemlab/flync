@@ -208,6 +208,7 @@ jobs:
         with:
           context: .
           target: flync-runtime
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-runtime.outputs.tags }}
           labels: ${{ steps.meta-runtime.outputs.labels }}
@@ -232,6 +233,7 @@ jobs:
         with:
           context: .
           target: flync-prewarmed
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-prewarmed.outputs.tags }}
           labels: ${{ steps.meta-prewarmed.outputs.labels }}
