@@ -810,16 +810,26 @@ def config_cmd(template, output, full):
             "# ==============================================================================\n"
             "# SAMPLE SPECIFICATION (Required - choose one mode)\n"
             "# ==============================================================================\n\n"
-            "# Mode 1: Auto-detect from FASTQ directory (recommended)\n"
+            "# Mode 1: Auto-detect from FASTQ directory (recommended for local files)\n"
             "samples: null\n"
-            'fastq_dir: "/path/to/fastq"\n'
-            "fastq_paired: false  # true for paired-end, false for single-end\n\n"
-            "# Mode 2: Plain text sample list\n"
-            '# samples: "samples.txt"\n'
-            '# fastq_dir: "/path/to/fastq"\n\n'
+            'fastq_dir: "/path/to/fastq"\n\n'
+            "# Mode 2: Plain text sample list (for SRA downloads)\n"
+            '# samples: "samples.txt"\n\n'
             "# Mode 3: CSV metadata (required for DGE - MUST have header row)\n"
-            '# samples: "metadata.csv"  # Must have headers: sample_id,condition\n'
-            '# fastq_dir: "/path/to/fastq"\n\n'
+            '# samples: "metadata.csv"  # Must have headers: sample_id,condition\n\n'
+            "# ==============================================================================\n"
+            "# LIBRARY LAYOUT (Choose one of 3 modes - see docs/library_layout_guide.md)\n"
+            "# ==============================================================================\n\n"
+            "# Mode 1: Global setting (all samples same layout)\n"
+            "fastq_paired: false  # true=paired-end, false=single-end\n\n"
+            "# Mode 2: Per-sample mapping file (for mixed paired/single-end samples)\n"
+            '# library_layout_file: "library_layouts.csv"\n'
+            "#   Format: sample_id,paired (true/false per sample)\n"
+            "#   When using this, remove/comment out 'fastq_paired' above\n\n"
+            "# Mode 3: Auto-detection (RECOMMENDED - omit both options above)\n"
+            "#   - SRA mode: Auto-detects from NCBI metadata (requires entrez-direct)\n"
+            "#   - Local FASTQ: Auto-detects from filename patterns (_1/_2 = paired)\n"
+            "#   Mixing paired and single-end samples is supported!\n\n"
             "# ==============================================================================\n"
             "# REFERENCE GENOME (Required)\n"
             "# ==============================================================================\n\n"

@@ -72,6 +72,7 @@ flync run-bio -c config.yaml --dry-run
 | samples: null fails | Ensure fastq_dir is set |
 | Snakefile not found | pip install -e . |
 | Missing genome index | Re-run flync setup |
+| Library layout mismatch | Omit fastq_paired for auto-detection (SRA mode) |
 | All predictions identical | Check feature extraction logs |
 | DGE missing | Ensure metadata CSV has header + condition column |
 
@@ -411,7 +412,16 @@ flync config --template --output config.yaml
 # Sample specification (3 options - see below)
 samples: null                           # Auto-detect from fastq_dir
 fastq_dir: "/path/to/fastq/files"      # Directory with FASTQ files
-fastq_paired: false                    # true for paired-end, false for single-end
+
+# Library layout configuration (3 modes - see Library Layout Guide)
+# Mode 1: Global setting (all samples same layout)
+fastq_paired: false                    # true=paired-end, false=single-end
+
+# Mode 2: Per-sample mapping file (for mixed layouts)
+# library_layout_file: "library_layouts.csv"  # Uncomment to use
+
+# Mode 3: Auto-detection (recommended - omit both above)
+# Automatically detects from SRA metadata or FASTQ file patterns
 
 # Reference files (created by 'flync setup')
 genome: "genome/genome.fa"
@@ -432,23 +442,26 @@ params:
   download_threads: 4  # For SRA downloads
 ```
 
+**📖 See [Library Layout Configuration Guide](docs/library_layout_guide.md) for detailed explanation of the three modes and when to use each.**
+
 #### Sample Specification (3 Modes)
 
-**Mode 1: Auto-detect from FASTQ directory (Recommended)**
+**Mode 1: Auto-detect from FASTQ directory (Recommended for local files)**
 ```yaml
 samples: null  # Must be null to enable auto-detection
 fastq_dir: "/path/to/fastq"
-fastq_paired: false
+fastq_paired: false  # Specify based on your data
 ```
 
 Automatically detects samples from filenames:
 - **Paired-end**: `sample1_1.fastq.gz` + `sample1_2.fastq.gz` → detects `sample1`
 - **Single-end**: `sample1.fastq.gz` → detects `sample1`
 
-**Mode 2: Plain text list**
+**Mode 2: Plain text list (for SRA downloads)**
 ```yaml
 samples: "samples.txt"
-fastq_dir: "/path/to/fastq"  # Optional if using SRA
+# fastq_paired auto-detected from SRA metadata (recommended)
+# Or explicitly set: fastq_paired: false
 ```
 
 `samples.txt`:
@@ -458,21 +471,26 @@ sample2
 sample3
 ```
 
-**Mode 3: CSV with metadata (for differential expression)**
+**Mode 3: CSV with metadata (for SRA + differential expression)**
 ```yaml
 samples: "metadata.csv"
-fastq_dir: "/path/to/fastq"  # Optional if using SRA
+# fastq_paired auto-detected from SRA metadata (recommended)
+# Or explicitly set: fastq_paired: true
 ```
 
 `metadata.csv`:
 ```csv
 sample_id,condition,replicate
-sample1,control,1
-sample2,control,2
-sample3,treated,1
+SRR123456,control,1
+SRR123457,control,2
+SRR123458,treated,1
 ```
 
-**⚠️ Important:** When using CSV metadata, the header row with column names (`sample_id`, `condition`) is **required**. Without headers, the DGE analysis will fail. The `sample_id` column is mandatory for sample identification, and the `condition` column is required to enable differential expression analysis.
+**⚠️ Important Notes:**
+- **Header row required**: CSV must have column names (`sample_id`, `condition`) as the first line
+- **Auto-detection**: When using SRA downloads (no `fastq_dir`), library layout (`fastq_paired`) is automatically detected from NCBI metadata
+- **Override detection**: You can explicitly set `fastq_paired: true/false` to override auto-detection
+- **Validation**: Pipeline validates that actual downloaded data matches the configuration and stops with a clear error if there's a mismatch
 
 ### 3. Run Bioinformatics Pipeline
 
@@ -1018,6 +1036,26 @@ flync run-bio -c config.yaml --cores 8 --dry-run --printshellcmds
 samples: null
 fastq_dir: "/path/to/fastq"  # Required for auto-detection
 fastq_paired: false
+```
+
+**Problem**: Library layout mismatch error (paired vs single-end)
+```bash
+# Error message in logs/download/{sample}.log:
+# "ERROR: Configuration specifies paired-end reads but SRA contains single-end data"
+
+# Solution 1: Let pipeline auto-detect (recommended for SRA mode)
+# Remove or comment out fastq_paired from config.yaml
+# samples: "metadata.csv"
+# # fastq_paired auto-detected from SRA metadata
+
+# Solution 2: Explicitly set the correct value
+# Check what SRA actually contains:
+fastq-dump -X 1 --split-files SRR123456  # If creates _1 and _2: paired-end
+
+# Then update config.yaml:
+fastq_paired: true   # If paired-end
+# or
+fastq_paired: false  # If single-end
 ```
 
 ### Feature Extraction Issues
