@@ -333,10 +333,10 @@ def predict_lncrna(
         click.secho(f"  Error during prediction: {str(e)}", fg="red")
         raise
 
-    # Augment predictions with FPKM values if coverage directory is available
+    # Augment predictions with FPKM values and DGE results
     try:
         if verbose:
-            click.echo("\n[4/4] Augmenting predictions with FPKM values...")
+            click.echo("\n[4/5] Augmenting predictions with FPKM values...")
 
         # Use provided cov_dir or infer from GTF path (standard pipeline structure)
         if cov_dir is None:
@@ -359,24 +359,68 @@ def predict_lncrna(
                 ]
                 click.echo(f"  Added {len(fpkm_cols)} FPKM columns")
 
-        # Save final
-        out_df.to_csv(output_file, index=False)
-
-        if verbose:
-            click.echo(f"\n✓ Predictions saved to: {output_file}")
-
-        return out_df
-
     except Exception as e:
         # Non-fatal enrichment failure: keep base predictions
         click.secho(
             f"  Warning: failed to enrich predictions with FPKM: {e}",
             fg="yellow",
         )
-        predictions_df.to_csv(output_file, index=False)
+        out_df = predictions_df
+
+    # Augment with DGE results if available
+    try:
         if verbose:
-            click.echo(f"\n✓ Predictions saved (base) to: {output_file}")
-        return predictions_df
+            click.echo("\n[5/5] Augmenting predictions with DGE results...")
+
+        # Infer DGE results path from GTF path (standard pipeline structure)
+        dge_dir = Path(gtf_file).parent.parent / "dge"
+        dge_results_file = dge_dir / "transcript_dge_results.csv"
+
+        if dge_results_file.exists():
+            # Load DGE results
+            dge_df = pd.read_csv(dge_results_file)
+
+            # Check if transcript_id column exists (new version)
+            if "transcript_id" in dge_df.columns:
+                # Select relevant columns and rename
+                dge_subset = dge_df[["transcript_id", "fc", "pval", "qval"]].copy()
+                dge_subset = dge_subset.rename(
+                    columns={"fc": "dge_fc", "pval": "dge_pval", "qval": "dge_qval"}
+                )
+
+                # Merge with predictions
+                out_df = out_df.merge(dge_subset, how="left", on="transcript_id")
+
+                if verbose:
+                    n_matched = out_df["dge_fc"].notna().sum()
+                    click.echo(
+                        f"  Added DGE results for {n_matched}/{len(out_df)} transcripts"
+                    )
+            else:
+                if verbose:
+                    click.secho(
+                        "  Warning: DGE results found but missing transcript_id column",
+                        fg="yellow",
+                    )
+        else:
+            if verbose:
+                click.echo("  No DGE results found (skipping)")
+
+    except Exception as e:
+        # Non-fatal DGE enrichment failure
+        if verbose:
+            click.secho(
+                f"  Warning: failed to enrich predictions with DGE results: {e}",
+                fg="yellow",
+            )
+
+    # Save final enriched predictions
+    out_df.to_csv(output_file, index=False)
+
+    if verbose:
+        click.echo(f"\n✓ Predictions saved to: {output_file}")
+
+    return out_df
 
 
 def predict_from_features(

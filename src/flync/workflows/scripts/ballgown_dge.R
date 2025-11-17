@@ -146,9 +146,11 @@ tryCatch({
         meas = "FPKM"
     )
     
-    # Add gene names
+    # Add gene names and transcript IDs
+    # The row names of stattest results are the transcript IDs
     results_transcripts <- data.frame(
         results_transcripts,
+        transcript_id = rownames(results_transcripts),
         gene_name = geneNames(bg_filt),
         gene_id = geneIDs(bg_filt)
     )
