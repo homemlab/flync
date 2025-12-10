@@ -212,6 +212,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta-runtime.outputs.tags }}
           labels: ${{ steps.meta-runtime.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
@@ -238,6 +240,7 @@ jobs:
           tags: ${{ steps.meta-prewarmed.outputs.tags }}
           labels: ${{ steps.meta-prewarmed.outputs.labels }}
           build-args: |
+            VERSION=${{ github.ref_name }}
             BWQ_CONFIG=src/flync/config/bwq_config.yaml
           cache-from: type=gha
           cache-to: type=gha,mode=max

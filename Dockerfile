@@ -13,10 +13,13 @@
 # =============================================================================
 FROM continuumio/miniconda3:latest AS base
 
+# Build argument for version (passed from CI/CD)
+ARG VERSION=dev
+
 # Metadata
 LABEL maintainer="FLYNC Contributors"
 LABEL description="FLYNC - lncRNA discovery pipeline for Drosophila melanogaster"
-LABEL version="1.0.0"
+LABEL version="${VERSION}"
 
 # Set environment
 ENV TERM=xterm-256color
