@@ -65,6 +65,18 @@ flync run-bio -c config.yaml --dry-run
 - setup: Prepare genome and indices once.
 - config: Generate or validate config.yaml.
 
+## Manuscript CLI vs Current Release
+
+The published manuscript described a shell-script-driven CLI with subcommands `run`, `sra`, and `fastq` that wrote a single `run.log`. The current release is Python-first (Click) and uses Snakemake directly; there is no central shell wrapper, and logs are written per-rule under `results/logs/` (plus stdout/stderr from ML runs). Feature parity is retained, but command names and inputs are simplified:
+
+| Manuscript command | Current equivalent | Notes |
+|--------------------|--------------------|-------|
+| `flync run -c /path/to/config.yaml` | `flync run-all -c /path/to/config.yaml -j 8` | Runs the full pipeline (bio + ML). Threads via `-j` (bio) and `-t` (ML). |
+| `flync sra -l list.txt -o out -m metadata.csv -t 8` | `flync run-bio -c config.yaml -j 8` (or `run-all`) | Put SRA accessions (and optional condition/replicate columns) in `samples:` CSV/TXT inside `config.yaml`. Output directory set by `output_dir` in the same config. |
+| `flync fastq -f /path/to/fastq -o out -p true -m metadata.csv -t 8` | `flync run-bio -c config.yaml -j 8` (or `run-all`) | Use `samples: null`, `fastq_dir: "/path/to/fastq"`, and `fastq_paired: true/false` (or omit for auto-detect). Metadata CSV goes in `samples:` for DGE. |
+
+Other options map as follows: threads = `-j/--cores` for bio + `-t/--threads` for ML; help is available via `flync <command> --help`; progress is printed by Snakemake and ML stages directly. There is no single `run.log`; inspect per-rule logs in `results/logs/{rule}/{sample}.log` and ML stdout for run details.
+
 ## Common Pitfalls (Fast Answers)
 
 | Issue | Fix |
