@@ -1,5 +1,5 @@
 [project]
-name = "flync"
+name = "flync-ml"
 # Version is now derived automatically from git tags via setuptools-scm.
 # Remove static 'version =' to avoid manual bumps; tags like 'v1.0.3' produce version '1.0.3'.
 dynamic = ["version"]  # PEP 621: declare version provided by setuptools-scm

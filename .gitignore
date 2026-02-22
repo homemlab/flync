@@ -97,6 +97,9 @@ Thumbs.db
 mlruns/
 mlflow.db
 
+# setuptools-scm auto-generated (must not be tracked)
+src/flync/_version.py
+
 # Backup files
 *.bak
 *.backup
