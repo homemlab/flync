@@ -170,8 +170,8 @@ Choose an installation method based on what you need:
 |----------|-------------------|---------|
 | Full pipeline (alignment + assembly + ML) | Conda (base) | `conda create -n flync -c RFCDSantos flync` |
 | Add differential expression (Ballgown) | Conda add-on | `conda install -n flync flync-dge` |
-| ML / feature extraction only (no aligners) | pip + extras | `pip install flync[features,ml]` |
-| Programmatic Snakemake orchestration (no bio tools) | pip minimal + workflow | `pip install flync[workflow]` |
+| ML / feature extraction only (no aligners) | pip + extras | `pip install flync-ml[features,ml]` |
+| Programmatic Snakemake orchestration (no bio tools) | pip minimal + workflow | `pip install flync-ml[workflow]` |
 | Reproducible container execution | Docker (runtime) | `docker pull ghcr.io/homemlab/flync:latest` |
 | Faster startup with pre-cached tracks | Docker (prewarmed) | `docker pull ghcr.io/homemlab/flync:latest-prewarmed` |
 | Automatic versioning (tag-driven) | Git tag (setuptools-scm) | `git tag v1.0.3 && git push --tags` |
@@ -204,10 +204,10 @@ source flync-venv/bin/activate
 pip install --upgrade pip
 
 # Feature extraction + ML
-pip install "flync[features,ml]"
+pip install "flync-ml[features,ml]"
 
 # Add Snakemake lightweight orchestration (still no external binaries)
-pip install "flync[workflow]"
+pip install "flync-ml[workflow]"
 
 flync run-ml --help
 ```
